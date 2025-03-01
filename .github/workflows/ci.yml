@@ -25,6 +25,12 @@ jobs:
       # Checkout the repository
       - uses: actions/checkout@v4
 
+      # Setup sccache, that'll share build artifacts with all the target directories
+      - uses: mozilla-actions/sccache-action@054db53350805f83040bf3e6e9b8cf5a139aa7c9
+      - run: |
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+
       # Prepare rustup
       - run: ${{ format('rustup toolchain install {0}', matrix.rust.toolchain) }}
       - run: ${{ format('rustup component add clippy --toolchain {0}', matrix.rust.toolchain) }}
