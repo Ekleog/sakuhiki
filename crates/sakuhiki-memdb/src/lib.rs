@@ -17,6 +17,18 @@ pub struct MemDb {
 impl sakuhiki::Backend for MemDb {
     type Error = std::convert::Infallible;
 
+    type Cf<'db> = String;
+    type TransactionCf<'t> = &'t str;
+
+    type CfHandleFuture<'db>
+        = Ready<Result<Self::Cf<'db>, Self::Error>>
+    where
+        Self: 'db;
+
+    fn cf_handle<'db>(&'db self, name: &str) -> Self::CfHandleFuture<'db> {
+        ready(Ok(name.to_string()))
+    }
+
     type RoTransaction<'t> = Transaction<&'t BTreeMap<Vec<u8>, Vec<u8>>>;
 
     // TODO(blocked): return impl Future (and in all the other Pin<Box<dyn Future<...>> too)
@@ -25,18 +37,24 @@ impl sakuhiki::Backend for MemDb {
     where
         F: 't;
 
-    fn ro_transaction<'fut, F, RetFut, Ret>(
+    fn ro_transaction<'fut, const CFS: usize, F, RetFut, Ret>(
         &'fut self,
+        cfs: &'fut [&'fut Self::Cf<'fut>; CFS],
         actions: F,
     ) -> Self::RoTransactionFuture<'fut, F, Ret>
     where
-        F: 'fut + for<'t> FnOnce(&'t Self::RoTransaction<'t>) -> RetFut,
+        F: 'fut
+            + for<'t> FnOnce(
+                &'t Self::RoTransaction<'t>,
+                &'t [Self::TransactionCf<'t>; CFS],
+            ) -> RetFut,
         RetFut: Future<Output = Ret>,
     {
         Box::pin(async {
             let db = self.db.read().await;
             let t = Transaction { db: &*db };
-            Ok(actions(&t).await)
+            let transaction_cfs = cfs.map(|cf| cf.as_str());
+            Ok(actions(&t, &transaction_cfs).await)
         })
     }
 
@@ -47,18 +65,24 @@ impl sakuhiki::Backend for MemDb {
     where
         F: 't;
 
-    fn rw_transaction<'fut, F, RetFut, Ret>(
+    fn rw_transaction<'fut, const CFS: usize, F, RetFut, Ret>(
         &'fut self,
+        cfs: &'fut [&'fut Self::Cf<'fut>; CFS],
         actions: F,
     ) -> Self::RwTransactionFuture<'fut, F, Ret>
     where
-        F: 'fut + for<'t> FnOnce(&'t Self::RwTransaction<'t>) -> RetFut,
+        F: 'fut
+            + for<'t> FnOnce(
+                &'t Self::RwTransaction<'t>,
+                &'t [Self::TransactionCf<'t>; CFS],
+            ) -> RetFut,
         RetFut: Future<Output = Ret>,
     {
         Box::pin(async {
             let mut db = self.db.write().await;
             let t = Transaction { db: &mut *db };
-            Ok(actions(&t).await)
+            let transaction_cfs = cfs.map(|cf| cf.as_str());
+            Ok(actions(&t, &transaction_cfs).await)
         })
     }
 }
@@ -67,7 +91,7 @@ pub struct Transaction<Ref> {
     db: Ref,
 }
 
-impl<Ref> sakuhiki::backend::RoTransaction for Transaction<Ref>
+impl<'t, Ref> sakuhiki::backend::RoTransaction<&'t str> for Transaction<Ref>
 where
     Ref: Borrow<BTreeMap<Vec<u8>, Vec<u8>>>,
 {
@@ -87,9 +111,14 @@ where
         = Ready<Result<Option<Self::Key<'db>>, Self::Error>>
     where
         Self: 'db,
+        &'t str: 'key,
         'db: 'key;
 
-    fn get<'db, 'key>(&'db mut self, key: &'key [u8]) -> Self::GetFuture<'key, 'db>
+    fn get<'db, 'key>(
+        &'db mut self,
+        cf: &'key &'t str,
+        key: &'key [u8],
+    ) -> Self::GetFuture<'key, 'db>
     where
         'db: 'key,
     {
@@ -101,10 +130,12 @@ where
         Pin<Box<dyn 'keys + Stream<Item = Result<(Self::Key<'db>, Self::Value<'db>), Self::Error>>>>
     where
         Self: 'db,
+        &'t str: 'keys,
         'db: 'keys;
 
     fn scan<'db, 'keys>(
         &'db mut self,
+        cf: &'keys &'t str,
         keys: impl 'keys + RangeBounds<[u8]>,
     ) -> Self::ScanStream<'keys, 'db>
     where
@@ -119,16 +150,22 @@ where
     }
 }
 
-impl<Ref> sakuhiki::backend::RwTransaction for Transaction<Ref>
+impl<'t, Ref> sakuhiki::backend::RwTransaction<&'t str> for Transaction<Ref>
 where
     Ref: BorrowMut<BTreeMap<Vec<u8>, Vec<u8>>> + Borrow<BTreeMap<Vec<u8>, Vec<u8>>>,
 {
     type PutFuture<'db>
         = Ready<Result<(), Self::Error>>
     where
-        Self: 'db;
+        Self: 'db,
+        &'t str: 'db;
 
-    fn put<'db>(&'db mut self, key: &'db [u8], value: &'db [u8]) -> Self::PutFuture<'db> {
+    fn put<'db>(
+        &'db mut self,
+        cf: &'db &'t str,
+        key: &'db [u8],
+        value: &'db [u8],
+    ) -> Self::PutFuture<'db> {
         self.db.borrow_mut().insert(key.to_vec(), value.to_vec());
         ready(Ok(()))
     }
@@ -136,9 +173,10 @@ where
     type DeleteFuture<'db>
         = Ready<Result<(), Self::Error>>
     where
-        Self: 'db;
+        Self: 'db,
+        &'t str: 'db;
 
-    fn delete<'db>(&'db mut self, key: &'db [u8]) -> Self::DeleteFuture<'db> {
+    fn delete<'db>(&'db mut self, cf: &'db &'t str, key: &'db [u8]) -> Self::DeleteFuture<'db> {
         self.db.borrow_mut().remove(key);
         ready(Ok(()))
     }
