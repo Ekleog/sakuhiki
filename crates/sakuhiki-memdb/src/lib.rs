@@ -1,7 +1,13 @@
-use std::{collections::BTreeMap, future::Future, future::Ready, ops::RangeBounds, pin::Pin};
+use std::{
+    collections::BTreeMap,
+    future::Future,
+    future::{ready, Ready},
+    ops::RangeBounds,
+    pin::Pin,
+};
 
 use async_lock::RwLock;
-use futures_util::Stream;
+use futures_util::{stream, Stream};
 
 pub struct MemDb {
     db: RwLock<BTreeMap<Vec<u8>, Vec<u8>>>,
@@ -28,7 +34,7 @@ impl sakuhiki::Backend for MemDb {
     {
         Box::pin(async {
             let db = self.db.read().await;
-            let t = RoTransaction { _db: &db };
+            let t = RoTransaction { db: &db };
             Ok(actions(&t).await)
         })
     }
@@ -50,14 +56,14 @@ impl sakuhiki::Backend for MemDb {
     {
         Box::pin(async {
             let mut db = self.db.write().await;
-            let t = RwTransaction { _db: &mut db };
+            let t = RwTransaction { db: &mut db };
             Ok(actions(&t).await)
         })
     }
 }
 
 pub struct RoTransaction<'t> {
-    _db: &'t BTreeMap<Vec<u8>, Vec<u8>>,
+    db: &'t BTreeMap<Vec<u8>, Vec<u8>>,
 }
 
 macro_rules! impl_ro_transaction {
@@ -81,11 +87,11 @@ macro_rules! impl_ro_transaction {
                 Self: 'db,
                 'db: 'key;
 
-            fn get<'db, 'key>(&'db self, _key: &'key [u8]) -> Self::GetFuture<'key, 'db>
+            fn get<'db, 'key>(&'db self, key: &'key [u8]) -> Self::GetFuture<'key, 'db>
             where
                 'db: 'key,
             {
-                todo!()
+                ready(Ok(self.db.get(key).map(|v| v.as_slice())))
             }
 
             type ScanStream<'keys, 'db>
@@ -115,7 +121,7 @@ macro_rules! impl_ro_transaction {
 impl_ro_transaction!(RoTransaction);
 
 pub struct RwTransaction<'t> {
-    _db: &'t mut BTreeMap<Vec<u8>, Vec<u8>>,
+    db: &'t mut BTreeMap<Vec<u8>, Vec<u8>>,
 }
 
 impl_ro_transaction!(RwTransaction);
