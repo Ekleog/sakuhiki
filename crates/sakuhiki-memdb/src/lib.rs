@@ -9,6 +9,7 @@ use std::{
 use async_lock::RwLock;
 use futures_util::{stream, Stream};
 
+// TODO: look into using something like concread's BptreeMap? But is it actually able to check for transaction conflict?
 pub struct MemDb {
     db: RwLock<BTreeMap<Vec<u8>, Vec<u8>>>,
 }
