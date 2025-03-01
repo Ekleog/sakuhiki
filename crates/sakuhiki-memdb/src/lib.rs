@@ -143,11 +143,12 @@ impl sakuhiki::backend::RwTransaction for RwTransaction<'_> {
     }
 
     type DeleteFuture<'db>
-        = Pin<Box<dyn 'db + Future<Output = Result<(), Self::Error>>>>
+        = Ready<Result<(), Self::Error>>
     where
         Self: 'db;
 
-    fn delete<'db>(&'db mut self, _key: &'db [u8]) -> Self::DeleteFuture<'db> {
-        todo!()
+    fn delete<'db>(&'db mut self, key: &'db [u8]) -> Self::DeleteFuture<'db> {
+        self.db.remove(key);
+        ready(Ok(()))
     }
 }
