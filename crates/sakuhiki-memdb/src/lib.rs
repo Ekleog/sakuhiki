@@ -15,17 +15,19 @@ pub enum Error {
     NonExistentColumnFamily,
 }
 
+type ColumnFamily = BTreeMap<Vec<u8>, Vec<u8>>;
+
 // TODO: look into using something like concread's BptreeMap? But is it actually able to check for transaction conflict?
 pub struct MemDb {
-    db: BTreeMap<String, RwLock<BTreeMap<Vec<u8>, Vec<u8>>>>,
+    db: BTreeMap<String, RwLock<ColumnFamily>>,
 }
 
 impl sakuhiki::Backend for MemDb {
     type Error = Error;
 
     type Cf<'db> = String;
-    type RoTransactionCf<'t> = &'t BTreeMap<Vec<u8>, Vec<u8>>;
-    type RwTransactionCf<'t> = &'t mut BTreeMap<Vec<u8>, Vec<u8>>;
+    type RoTransactionCf<'t> = &'t ColumnFamily;
+    type RwTransactionCf<'t> = &'t mut ColumnFamily;
 
     type CfHandleFuture<'db>
         = Ready<Result<Self::Cf<'db>, Self::Error>>
@@ -56,7 +58,7 @@ impl sakuhiki::Backend for MemDb {
     {
         Box::pin(async {
             let t = Transaction { _private: () };
-            let mut cfs = cfs.into_iter().enumerate().collect::<Vec<_>>();
+            let mut cfs = cfs.iter().enumerate().collect::<Vec<_>>();
             cfs.sort_by_key(|e| e.1);
             let mut transaction_cfs = Vec::with_capacity(CFS);
             for (i, &cf) in cfs {
@@ -92,7 +94,7 @@ impl sakuhiki::Backend for MemDb {
     {
         Box::pin(async {
             let t = Transaction { _private: () };
-            let mut cfs = cfs.into_iter().enumerate().collect::<Vec<_>>();
+            let mut cfs = cfs.iter().enumerate().collect::<Vec<_>>();
             cfs.sort_by_key(|e| e.1);
             let mut transaction_cfs = Vec::with_capacity(CFS);
             for (i, &cf) in cfs {
@@ -116,7 +118,7 @@ pub struct Transaction {
 
 impl<Cf> sakuhiki::backend::RoTransaction<Cf> for Transaction
 where
-    Cf: Borrow<BTreeMap<Vec<u8>, Vec<u8>>>,
+    Cf: Borrow<ColumnFamily>,
 {
     type Error = std::convert::Infallible;
 
@@ -173,7 +175,7 @@ where
 
 impl<Cf> sakuhiki::backend::RwTransaction<Cf> for Transaction
 where
-    Cf: BorrowMut<BTreeMap<Vec<u8>, Vec<u8>>> + Borrow<BTreeMap<Vec<u8>, Vec<u8>>>,
+    Cf: BorrowMut<ColumnFamily> + Borrow<ColumnFamily>,
 {
     type PutFuture<'db>
         = Ready<Result<(), Self::Error>>
