@@ -24,6 +24,7 @@ rust-version = "1.81.0"
 [workspace.dependencies]
 sakuhiki = { path = "crates/sakuhiki" }
 
+async-lock = "3.4"
 futures-util = "0.3.31"
 indexed-db = "0.4.2"
 rocksdb = "0.23.0"
