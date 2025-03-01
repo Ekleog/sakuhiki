@@ -17,11 +17,13 @@ pub trait RoTransaction {
     where
         Self: 'a;
 
+    /// Guarantees that the returned value still has this value at the end of the transaction.
+    fn get(&'_ self, key: &'_ [u8]) -> Self::GetFuture<'_>;
+
     type ScanStream<'a>: Stream<Item = Result<(Self::Key<'a>, Self::Value<'a>), Self::Error>>
     where
         Self: 'a;
 
-    fn get(&'_ self, key: &'_ [u8]) -> Self::GetFuture<'_>;
     // TODO: do we need get_many / multi_get?
     fn scan<'a>(&'a self, keys: impl RangeBounds<&'a [u8]>) -> Self::ScanStream<'a>;
 }
@@ -31,11 +33,12 @@ pub trait RwTransaction: RoTransaction {
     where
         Self: 'a;
 
+    fn put(&'_ self, key: &'_ [u8], value: &'_ [u8]) -> Self::PutFuture<'_>;
+
     type DeleteFuture<'a>: Future<Output = Result<(), Self::Error>>
     where
         Self: 'a;
 
-    fn put(&'_ self, key: &'_ [u8], value: &'_ [u8]) -> Self::PutFuture<'_>;
     fn delete(&'_ self, key: &'_ [u8]) -> Self::DeleteFuture<'_>;
 }
 
@@ -46,19 +49,25 @@ pub trait Backend {
     where
         Self: 'a;
 
+    type RoTransactionFuture<'a, F, Return>: Future<Output = Result<Return, Self::Error>>
+    where
+        Self: 'a;
+
+    fn ro_transaction<F, RetFut, Ret>(&self, actions: F) -> Self::RoTransactionFuture<'_, F, Ret>
+    where
+        F: FnOnce(&'_ Self::RoTransaction<'_>) -> RetFut,
+        RetFut: Future<Output = Ret>;
+
     type RwTransaction<'a>: RwTransaction
     where
         Self: 'a;
 
-    type RoTransactionFuture<'a>: Future<Output = Result<Self::RoTransaction<'a>, Self::Error>>
+    type RwTransactionFuture<'a, F, Return>: Future<Output = Result<Return, Self::Error>>
     where
         Self: 'a;
 
-    type RwTransactionFuture<'a>: Future<Output = Result<Self::RwTransaction<'a>, Self::Error>>
+    fn rw_transaction<F, RetFut, Ret>(&self, actions: F) -> Self::RwTransactionFuture<'_, F, Ret>
     where
-        Self: 'a;
-
-    fn ro_transaction(&self) -> Self::RoTransactionFuture<'_>;
-
-    fn rw_transaction(&self) -> Self::RwTransactionFuture<'_>;
+        F: FnOnce(&'_ Self::RwTransaction<'_>) -> RetFut,
+        RetFut: Future<Output = Ret>;
 }
