@@ -28,7 +28,7 @@ impl sakuhiki::Backend for MemDb {
     {
         Box::pin(async {
             let db = self.db.read().await;
-            let t = RoTransaction { db: &db };
+            let t = RoTransaction { _db: &db };
             Ok(actions(&t).await)
         })
     }
@@ -50,14 +50,14 @@ impl sakuhiki::Backend for MemDb {
     {
         Box::pin(async {
             let mut db = self.db.write().await;
-            let t = RwTransaction { db: &mut db };
+            let t = RwTransaction { _db: &mut db };
             Ok(actions(&t).await)
         })
     }
 }
 
 pub struct RoTransaction<'t> {
-    db: &'t BTreeMap<Vec<u8>, Vec<u8>>,
+    _db: &'t BTreeMap<Vec<u8>, Vec<u8>>,
 }
 
 macro_rules! impl_ro_transaction {
@@ -115,12 +115,12 @@ macro_rules! impl_ro_transaction {
 impl_ro_transaction!(RoTransaction);
 
 pub struct RwTransaction<'t> {
-    db: &'t mut BTreeMap<Vec<u8>, Vec<u8>>,
+    _db: &'t mut BTreeMap<Vec<u8>, Vec<u8>>,
 }
 
 impl_ro_transaction!(RwTransaction);
 
-impl<'t> sakuhiki::backend::RwTransaction for RwTransaction<'t> {
+impl sakuhiki::backend::RwTransaction for RwTransaction<'_> {
     type PutFuture<'db>
         = Pin<Box<dyn 'db + Future<Output = Result<(), Self::Error>>>>
     where
