@@ -7,19 +7,25 @@ pub trait RoTransaction<Cf> {
 
     type Key<'db>: AsRef<[u8]>
     where
-        Self: 'db;
+        Self: 'db,
+        Cf: 'db;
 
     type Value<'db>: AsRef<[u8]>
     where
-        Self: 'db;
+        Self: 'db,
+        Cf: 'db;
 
     type GetFuture<'key, 'db>: Future<Output = Result<Option<Self::Value<'db>>, Self::Error>>
     where
         Self: 'db,
-        Cf: 'key,
+        Cf: 'db,
         'db: 'key;
 
-    fn get<'db, 'key>(&'db mut self, cf: &'key Cf, key: &'key [u8]) -> Self::GetFuture<'key, 'db>
+    fn get<'db, 'key>(
+        &'db mut self,
+        cf: &'db mut Cf,
+        key: &'key [u8],
+    ) -> Self::GetFuture<'key, 'db>
     where
         'db: 'key;
 
@@ -28,13 +34,13 @@ pub trait RoTransaction<Cf> {
     >
     where
         Self: 'db,
-        Cf: 'keys,
+        Cf: 'db,
         'db: 'keys;
 
     // TODO: do we need get_many / multi_get?
     fn scan<'db, 'keys>(
         &'db mut self,
-        cf: &'keys Cf,
+        cf: &'db mut Cf,
         keys: impl 'keys + RangeBounds<[u8]>,
     ) -> Self::ScanStream<'keys, 'db>
     where
@@ -49,7 +55,7 @@ pub trait RwTransaction<Cf>: RoTransaction<Cf> {
 
     fn put<'db>(
         &'db mut self,
-        cf: &'db Cf,
+        cf: &'db mut Cf,
         key: &'db [u8],
         value: &'db [u8],
     ) -> Self::PutFuture<'db>;
@@ -59,17 +65,21 @@ pub trait RwTransaction<Cf>: RoTransaction<Cf> {
         Self: 'db,
         Cf: 'db;
 
-    fn delete<'db>(&'db mut self, cf: &'db Cf, key: &'db [u8]) -> Self::DeleteFuture<'db>;
+    fn delete<'db>(&'db mut self, cf: &'db mut Cf, key: &'db [u8]) -> Self::DeleteFuture<'db>;
 }
 
 pub trait Backend {
     type Error;
 
-    type Cf<'db>: Clone
+    type Cf<'db>
     where
         Self: 'db;
 
-    type TransactionCf<'t>: Clone
+    type RoTransactionCf<'t>
+    where
+        Self: 't;
+
+    type RwTransactionCf<'t>
     where
         Self: 't;
 
@@ -79,7 +89,7 @@ pub trait Backend {
 
     fn cf_handle<'db>(&'db self, name: &str) -> Self::CfHandleFuture<'db>;
 
-    type RoTransaction<'t>: RoTransaction<Self::TransactionCf<'t>>
+    type RoTransaction<'t>: RoTransaction<Self::RoTransactionCf<'t>>
     where
         Self: 't;
 
@@ -95,13 +105,10 @@ pub trait Backend {
     ) -> Self::RoTransactionFuture<'fut, F, Ret>
     where
         F: 'fut
-            + for<'t> FnOnce(
-                &'t Self::RoTransaction<'t>,
-                &'t [Self::TransactionCf<'t>; CFS],
-            ) -> RetFut,
+            + for<'t> FnOnce(&'t Self::RoTransaction<'t>, [Self::RoTransactionCf<'t>; CFS]) -> RetFut,
         RetFut: Future<Output = Ret>;
 
-    type RwTransaction<'t>: RwTransaction<Self::TransactionCf<'t>>
+    type RwTransaction<'t>: RwTransaction<Self::RwTransactionCf<'t>>
     where
         Self: 't;
 
@@ -117,9 +124,6 @@ pub trait Backend {
     ) -> Self::RwTransactionFuture<'fut, F, Ret>
     where
         F: 'fut
-            + for<'t> FnOnce(
-                &'t Self::RwTransaction<'t>,
-                &'t [Self::TransactionCf<'t>; CFS],
-            ) -> RetFut,
+            + for<'t> FnOnce(&'t Self::RwTransaction<'t>, [Self::RwTransactionCf<'t>; CFS]) -> RetFut,
         RetFut: Future<Output = Ret>;
 }
