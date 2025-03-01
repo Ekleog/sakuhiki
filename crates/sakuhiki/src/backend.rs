@@ -1,4 +1,4 @@
-use std::future::Future;
+use std::{future::Future, ops::RangeBounds};
 
 use futures_util::Stream;
 
@@ -23,7 +23,7 @@ pub trait RoTransaction {
 
     fn get(&'_ self, key: &'_ [u8]) -> Self::GetFuture<'_>;
     // TODO: do we need get_many / multi_get?
-    fn scan(&'_ self, start: &'_ [u8], end: &'_ [u8]) -> Self::ScanStream<'_>;
+    fn scan<'a>(&'a self, keys: impl RangeBounds<&'a [u8]>) -> Self::ScanStream<'a>;
 }
 
 pub trait RwTransaction: RoTransaction {
