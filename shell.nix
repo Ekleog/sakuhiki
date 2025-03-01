@@ -11,6 +11,7 @@ pkgs.mkShell.override {
 
     (fenix.combine (with fenix; [
       minimal.cargo
+      complete.clippy
       minimal.rustc
       complete.rust-src
       rust-analyzer
