@@ -107,12 +107,16 @@ macro_rules! impl_ro_transaction {
 
             fn scan<'db, 'keys>(
                 &'db self,
-                _keys: impl RangeBounds<&'keys [u8]>,
+                keys: impl 'keys + RangeBounds<[u8]>,
             ) -> Self::ScanStream<'keys, 'db>
             where
                 'db: 'keys,
             {
-                todo!()
+                Box::pin(stream::iter(
+                    self.db
+                        .range(keys)
+                        .map(|(k, v)| Ok((k.as_slice(), v.as_slice()))),
+                ))
             }
         }
     };

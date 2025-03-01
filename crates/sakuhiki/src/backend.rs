@@ -32,7 +32,7 @@ pub trait RoTransaction {
     // TODO: do we need get_many / multi_get?
     fn scan<'db, 'keys>(
         &'db self,
-        keys: impl RangeBounds<&'keys [u8]>,
+        keys: impl 'keys + RangeBounds<[u8]>,
     ) -> Self::ScanStream<'keys, 'db>
     where
         'db: 'keys;
