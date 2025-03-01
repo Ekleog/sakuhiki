@@ -11,7 +11,7 @@ jobs:
     strategy:
       matrix:
         test:
-          - { name: Build, command: build, args: --no-dev-deps }
+          - { name: Build, command: build }
           - { name: Clippy, command: clippy, args: -- -D warnings }
           - { name: Test, command: test }
         rust:
