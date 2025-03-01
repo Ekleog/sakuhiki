@@ -1,0 +1,22 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+authors = ["Leo Gaspard <leo@casmic.fr>"]
+categories = [
+    "asynchronous",
+    "database-implementations",
+    "database",
+    "web-programming",
+    "wasm",
+]
+description = "Indexing overlay for any key-value store"
+edition = "2021"
+homepage = "https://github.com/Ekleog/sakuhiki"
+keywords = ["database", "async", "web", "native"]
+license = "MIT OR Apache-2.0"
+readme = "./README.md"
+repository = "https://github.com/Ekleog/sakuhiki"
+# Remember to update the ci.yml file when updating this
+rust-version = "1.81.0"

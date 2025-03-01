@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        test:
+          - { name: Build, command: build, args: --no-dev-deps }
+          - { name: Clippy, command: clippy, args: -- -D warnings }
+          - { name: Test, command: test }
+        rust:
+          - { name: Nightly, toolchain: "nightly" }
+          - { name: Stable, toolchain: "stable" }
+          # Remember to update the workspace Cargo.toml when editing this
+          - { name: MSRV, toolchain: "1.81.0" }
+    name: ${{ format('{0} ({1})', matrix.test.name, matrix.rust.name) }}
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout the repository
+      - uses: actions/checkout@v4
+
+      # Prepare rustup
+      - run: ${{ format('rustup toolchain install {0}', matrix.rust.toolchain) }}
+      - run: ${{ format('rustup component add clippy --toolchain {0}', matrix.rust.toolchain) }}
+
+      # Run the tests
+      - run: cargo test --workspace
+      - run: ${{ format('cargo +{0} {1} --workspace {2}', matrix.rust.toolchain, matrix.test.command, matrix.test.args) }}
