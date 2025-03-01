@@ -88,7 +88,7 @@ macro_rules! impl_ro_transaction {
                 Self: 'db,
                 'db: 'key;
 
-            fn get<'db, 'key>(&'db self, key: &'key [u8]) -> Self::GetFuture<'key, 'db>
+            fn get<'db, 'key>(&'db mut self, key: &'key [u8]) -> Self::GetFuture<'key, 'db>
             where
                 'db: 'key,
             {
@@ -107,7 +107,7 @@ macro_rules! impl_ro_transaction {
                 'db: 'keys;
 
             fn scan<'db, 'keys>(
-                &'db self,
+                &'db mut self,
                 keys: impl 'keys + RangeBounds<[u8]>,
             ) -> Self::ScanStream<'keys, 'db>
             where
@@ -133,12 +133,13 @@ impl_ro_transaction!(RwTransaction);
 
 impl sakuhiki::backend::RwTransaction for RwTransaction<'_> {
     type PutFuture<'db>
-        = Pin<Box<dyn 'db + Future<Output = Result<(), Self::Error>>>>
+        = Ready<Result<(), Self::Error>>
     where
         Self: 'db;
 
-    fn put<'db>(&'db self, _key: &'db [u8], _value: &'db [u8]) -> Self::PutFuture<'db> {
-        todo!()
+    fn put<'db>(&'db mut self, key: &'db [u8], value: &'db [u8]) -> Self::PutFuture<'db> {
+        self.db.insert(key.to_vec(), value.to_vec());
+        ready(Ok(()))
     }
 
     type DeleteFuture<'db>
@@ -146,7 +147,7 @@ impl sakuhiki::backend::RwTransaction for RwTransaction<'_> {
     where
         Self: 'db;
 
-    fn delete<'db>(&'db self, _key: &'db [u8]) -> Self::DeleteFuture<'db> {
+    fn delete<'db>(&'db mut self, _key: &'db [u8]) -> Self::DeleteFuture<'db> {
         todo!()
     }
 }

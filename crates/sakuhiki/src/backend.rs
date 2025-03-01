@@ -18,7 +18,7 @@ pub trait RoTransaction {
         Self: 'db,
         'db: 'key;
 
-    fn get<'db, 'key>(&'db self, key: &'key [u8]) -> Self::GetFuture<'key, 'db>
+    fn get<'db, 'key>(&'db mut self, key: &'key [u8]) -> Self::GetFuture<'key, 'db>
     where
         'db: 'key;
 
@@ -31,7 +31,7 @@ pub trait RoTransaction {
 
     // TODO: do we need get_many / multi_get?
     fn scan<'db, 'keys>(
-        &'db self,
+        &'db mut self,
         keys: impl 'keys + RangeBounds<[u8]>,
     ) -> Self::ScanStream<'keys, 'db>
     where
@@ -43,13 +43,13 @@ pub trait RwTransaction: RoTransaction {
     where
         Self: 'db;
 
-    fn put<'db>(&'db self, key: &'db [u8], value: &'db [u8]) -> Self::PutFuture<'db>;
+    fn put<'db>(&'db mut self, key: &'db [u8], value: &'db [u8]) -> Self::PutFuture<'db>;
 
     type DeleteFuture<'db>: Future<Output = Result<(), Self::Error>>
     where
         Self: 'db;
 
-    fn delete<'db>(&'db self, key: &'db [u8]) -> Self::DeleteFuture<'db>;
+    fn delete<'db>(&'db mut self, key: &'db [u8]) -> Self::DeleteFuture<'db>;
 }
 
 pub trait Backend {
