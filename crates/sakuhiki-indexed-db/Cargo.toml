@@ -1,0 +1,18 @@
+[package]
+name = "sakuhiki-indexed-db"
+version = "0.1.0"
+authors.workspace = true
+categories.workspace = true
+description.workspace = true
+edition.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+sakuhiki.workspace = true
+
+indexed-db.workspace = true
