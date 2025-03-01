@@ -17,4 +17,5 @@ pkgs.mkShell.override {
       targets.wasm32-unknown-unknown.latest.rust-std
     ]))
   ];
+  LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
 }
