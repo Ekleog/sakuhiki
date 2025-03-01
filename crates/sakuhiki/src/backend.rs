@@ -61,14 +61,15 @@ pub trait Backend {
 
     type RoTransactionFuture<'t, F, Return>: Future<Output = Result<Return, Self::Error>>
     where
-        Self: 't;
+        Self: 't,
+        F: 't;
 
-    fn ro_transaction<'db, F, RetFut, Ret>(
-        &'db self,
+    fn ro_transaction<'fut, F, RetFut, Ret>(
+        &'fut self,
         actions: F,
-    ) -> Self::RoTransactionFuture<'db, F, Ret>
+    ) -> Self::RoTransactionFuture<'fut, F, Ret>
     where
-        F: for<'t> FnOnce(&'t Self::RoTransaction<'t>) -> RetFut,
+        F: 'fut + for<'t> FnOnce(&'t Self::RoTransaction<'t>) -> RetFut,
         RetFut: Future<Output = Ret>;
 
     type RwTransaction<'t>: RwTransaction
@@ -77,13 +78,14 @@ pub trait Backend {
 
     type RwTransactionFuture<'t, F, Return>: Future<Output = Result<Return, Self::Error>>
     where
-        Self: 't;
+        Self: 't,
+        F: 't;
 
-    fn rw_transaction<'db, F, RetFut, Ret>(
-        &'db self,
+    fn rw_transaction<'fut, F, RetFut, Ret>(
+        &'fut self,
         actions: F,
-    ) -> Self::RwTransactionFuture<'db, F, Ret>
+    ) -> Self::RwTransactionFuture<'fut, F, Ret>
     where
-        F: for<'t> FnOnce(&'t Self::RwTransaction<'t>) -> RetFut,
+        F: 'fut + for<'t> FnOnce(&'t Self::RwTransaction<'t>) -> RetFut,
         RetFut: Future<Output = Ret>;
 }
