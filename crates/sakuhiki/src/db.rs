@@ -1,6 +1,9 @@
 use std::future::Future;
 
-use crate::Backend;
+use crate::{
+    backend::{self, RoTransaction as _},
+    Backend,
+};
 
 pub struct Db<B> {
     backend: B,
@@ -28,8 +31,8 @@ where
         RetFut: Future<Output = Ret>,
     {
         self.backend
-            .ro_transaction(cfs, move |_transaction, cfs| {
-                actions(&RoTransaction { _transaction }, cfs)
+            .ro_transaction(cfs, move |transaction, cfs| {
+                actions(&RoTransaction { transaction }, cfs)
             })
             .await
     }
@@ -51,16 +54,39 @@ where
     }
 }
 
+pub type Key<'t, 'db, B> = <<B as Backend>::RoTransaction<'t> as backend::RoTransaction<
+    <B as Backend>::RoTransactionCf<'t>,
+    <B as Backend>::Error,
+>>::Key<'db>;
+
+pub type Value<'t, 'db, B> = <<B as Backend>::RoTransaction<'t> as backend::RoTransaction<
+    <B as Backend>::RoTransactionCf<'t>,
+    <B as Backend>::Error,
+>>::Value<'db>;
+
 pub struct RoTransaction<'t, B>
 where
     B: 't + Backend,
 {
-    _transaction: &'t B::RoTransaction<'t>,
+    transaction: &'t mut B::RoTransaction<'t>,
+}
+
+impl<'t, B> RoTransaction<'t, B>
+where
+    B: Backend,
+{
+    pub async fn get<'db, 'key>(
+        &'db mut self,
+        cf: &'db mut B::RoTransactionCf<'t>,
+        key: &'key [u8],
+    ) -> Result<Option<Value<'t, 'db, B>>, B::Error> {
+        self.transaction.get(cf, key).await
+    }
 }
 
 pub struct RwTransaction<'t, B>
 where
     B: 't + Backend,
 {
-    _transaction: &'t B::RwTransaction<'t>,
+    _transaction: &'t mut B::RwTransaction<'t>,
 }
