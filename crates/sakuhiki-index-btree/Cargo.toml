@@ -1,5 +1,5 @@
 [package]
-name = "sakuhiki"
+name = "sakuhiki-index-btree"
 version = "0.1.0"
 authors.workspace = true
 categories.workspace = true
@@ -12,10 +12,5 @@ readme.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
-[features]
-index-btree = ["sakuhiki-index-btree"]
-
 [dependencies]
 sakuhiki-core.workspace = true
-
-sakuhiki-index-btree = { workspace = true, optional = true }

@@ -23,6 +23,7 @@ rust-version = "1.85.0"
 
 [workspace.dependencies]
 sakuhiki-core = { path = "crates/sakuhiki-core" }
+sakuhiki-index-btree = { path = "crates/sakuhiki-index-btree" }
 sakuhiki-indexed-db = { path = "crates/sakuhiki-indexed-db" }
 sakuhiki-memdb = { path = "crates/sakuhiki-memdb" }
 sakuhiki-rocksdb = { path = "crates/sakuhiki-rocksdb" }
