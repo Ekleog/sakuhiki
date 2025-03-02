@@ -6,8 +6,6 @@ macro_rules! ro_transaction_fns {
     ($t:lifetime, $cf:ident) => {
         type GetFuture<'db, 'key>: Future<Output = Result<Option<B::Value<'db>>, B::Error>>
         where
-            Self: 'db,
-            B: $t,
             $t: 'db,
             'db: 'key;
 
@@ -17,13 +15,11 @@ macro_rules! ro_transaction_fns {
             key: &'key [u8],
         ) -> Self::GetFuture<'db, 'key>
         where
-            Self: 'db,
+            $t: 'db,
             'db: 'key;
 
         type ScanStream<'db, 'keys>: Stream<Item = Result<(B::Key<'db>, B::Value<'db>), B::Error>>
         where
-            Self: 'db,
-            B: $t,
             $t: 'db,
             'db: 'keys;
 
@@ -34,23 +30,28 @@ macro_rules! ro_transaction_fns {
             keys: impl 'keys + RangeBounds<[u8]>,
         ) -> Self::ScanStream<'db, 'keys>
         where
-            Self: 'db,
             't: 'db,
             'db: 'keys;
     };
 }
 
-pub trait RoTransaction<'t, B: ?Sized + Backend> {
+pub trait RoTransaction<'t, B: ?Sized + Backend>
+where
+    Self: 't,
+    B: 't,
+{
     ro_transaction_fns!('t, RoTransactionCf);
 }
 
-pub trait RwTransaction<'t, B: ?Sized + Backend> {
+pub trait RwTransaction<'t, B: ?Sized + Backend>
+where
+    Self: 't,
+    B: 't,
+{
     ro_transaction_fns!('t, RwTransactionCf);
 
     type PutFuture<'db>: Future<Output = Result<(), B::Error>>
     where
-        Self: 'db,
-        B: 't,
         't: 'db;
 
     fn put<'db>(
@@ -58,19 +59,21 @@ pub trait RwTransaction<'t, B: ?Sized + Backend> {
         cf: &'db mut B::RwTransactionCf<'t>,
         key: &'db [u8],
         value: &'db [u8],
-    ) -> Self::PutFuture<'db>;
+    ) -> Self::PutFuture<'db>
+    where
+        't: 'db;
 
     type DeleteFuture<'db>: Future<Output = Result<(), B::Error>>
     where
-        Self: 'db,
-        B: 't,
         't: 'db;
 
     fn delete<'db>(
         &'db mut self,
         cf: &'db mut B::RwTransactionCf<'t>,
         key: &'db [u8],
-    ) -> Self::DeleteFuture<'db>;
+    ) -> Self::DeleteFuture<'db>
+    where
+        't: 'db;
 }
 
 pub trait Backend {

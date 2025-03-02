@@ -26,24 +26,15 @@ pub struct MemDb {
 impl sakuhiki::Backend for MemDb {
     type Error = Error;
 
-    type Key<'db>
-        = &'db [u8]
-    where
-        Self: 'db;
+    type Key<'db> = &'db [u8];
 
-    type Value<'db>
-        = &'db [u8]
-    where
-        Self: 'db;
+    type Value<'db> = &'db [u8];
 
     type Cf<'db> = String;
     type RoTransactionCf<'t> = RoCf<'t>;
     type RwTransactionCf<'t> = RwCf<'t>;
 
-    type CfHandleFuture<'db>
-        = Ready<Result<Self::Cf<'db>, Self::Error>>
-    where
-        Self: 'db;
+    type CfHandleFuture<'db> = Ready<Result<Self::Cf<'db>, Self::Error>>;
 
     fn cf_handle<'db>(&'db self, name: &str) -> Self::CfHandleFuture<'db> {
         ready(Ok(name.to_string()))
@@ -138,7 +129,6 @@ macro_rules! ro_transaction_methods {
         type GetFuture<'db, 'key>
             = Ready<Result<Option<&'db [u8]>, Error>>
         where
-            Self: 'db,
             't: 'db,
             'db: 'key;
 
@@ -148,7 +138,6 @@ macro_rules! ro_transaction_methods {
             key: &'key [u8],
         ) -> Self::GetFuture<'db, 'key>
         where
-            Self: 'db,
             'db: 'key,
         {
             ready(Ok(cf.get(key).map(|v| v.as_slice())))
@@ -157,7 +146,6 @@ macro_rules! ro_transaction_methods {
         type ScanStream<'db, 'keys>
             = Pin<Box<dyn 'keys + Stream<Item = Result<(&'db [u8], &'db [u8]), Error>>>>
         where
-            Self: 'db,
             't: 'db,
             'db: 'keys;
 
@@ -167,7 +155,6 @@ macro_rules! ro_transaction_methods {
             keys: impl 'keys + RangeBounds<[u8]>,
         ) -> Self::ScanStream<'db, 'keys>
         where
-            Self: 'db,
             't: 'db,
             'db: 'keys,
         {
@@ -189,7 +176,6 @@ impl<'t> sakuhiki::backend::RwTransaction<'t, MemDb> for Transaction {
     type PutFuture<'db>
         = Ready<Result<(), Error>>
     where
-        Self: 'db,
         't: 'db;
 
     fn put<'db>(
@@ -197,7 +183,10 @@ impl<'t> sakuhiki::backend::RwTransaction<'t, MemDb> for Transaction {
         cf: &'db mut RwCf<'t>,
         key: &'db [u8],
         value: &'db [u8],
-    ) -> Self::PutFuture<'db> {
+    ) -> Self::PutFuture<'db>
+    where
+        't: 'db,
+    {
         cf.insert(key.to_vec(), value.to_vec());
         ready(Ok(()))
     }
@@ -205,14 +194,12 @@ impl<'t> sakuhiki::backend::RwTransaction<'t, MemDb> for Transaction {
     type DeleteFuture<'db>
         = Ready<Result<(), Error>>
     where
-        Self: 'db,
         't: 'db;
 
-    fn delete<'db>(
-        &'db mut self,
-        cf: &'db mut RwCf<'t>,
-        key: &'db [u8],
-    ) -> Self::DeleteFuture<'db> {
+    fn delete<'db>(&'db mut self, cf: &'db mut RwCf<'t>, key: &'db [u8]) -> Self::DeleteFuture<'db>
+    where
+        't: 'db,
+    {
         cf.remove(key);
         ready(Ok(()))
     }
