@@ -11,4 +11,4 @@ mod errors;
 pub use errors::IndexError;
 
 mod index;
-pub use index::Index;
+pub use index::{DynFuture, Index};
