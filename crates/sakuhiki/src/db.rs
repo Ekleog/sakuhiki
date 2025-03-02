@@ -113,4 +113,12 @@ where
     ) -> Result<(), B::Error> {
         self.transaction.put(cf, key, value).await
     }
+
+    pub async fn delete<'db>(
+        &'db mut self,
+        cf: &'db mut B::RwTransactionCf<'t>,
+        key: &'db [u8],
+    ) -> Result<(), B::Error> {
+        self.transaction.delete(cf, key).await
+    }
 }
