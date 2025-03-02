@@ -76,9 +76,7 @@ where
         &'db mut self,
         cf: &'db mut B::RoTransactionCf<'t>,
         keys: Keys,
-    ) -> impl 'keys
-           + Stream<Item = Result<(B::Key<'db>, B::Value<'db>), B::Error>>
-           + use<'t, 'db, 'keys, B, Keys>
+    ) -> impl Stream<Item = Result<(B::Key<'db>, B::Value<'db>), B::Error>> + use<'t, 'db, 'keys, B, Keys>
     where
         Keys: 'keys + RangeBounds<[u8]>,
         'db: 'keys,
