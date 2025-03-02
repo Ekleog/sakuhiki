@@ -1,4 +1,6 @@
-use std::future::Future;
+use std::{future::Future, ops::RangeBounds};
+
+use futures_util::Stream;
 
 use crate::{
     backend::{self, RoTransaction as _},
@@ -81,6 +83,17 @@ where
         key: &'key [u8],
     ) -> Result<Option<Value<'t, 'db, B>>, B::Error> {
         self.transaction.get(cf, key).await
+    }
+
+    pub fn scan<'db, 'keys>(
+        &'db mut self,
+        cf: &'db mut B::RoTransactionCf<'t>,
+        keys: impl 'keys + RangeBounds<[u8]>,
+    ) -> impl 'keys + Stream<Item = Result<(Key<'t, 'db, B>, Value<'t, 'db, B>), B::Error>>
+    where
+        'db: 'keys,
+    {
+        self.transaction.scan(cf, keys)
     }
 }
 
