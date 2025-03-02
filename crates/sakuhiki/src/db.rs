@@ -104,4 +104,13 @@ where
     B: Backend,
 {
     ro_transaction_methods!(RwTransactionCf);
+
+    pub async fn put<'db>(
+        &'db mut self,
+        cf: &'db mut B::RwTransactionCf<'t>,
+        key: &'db [u8],
+        value: &'db [u8],
+    ) -> Result<(), B::Error> {
+        self.transaction.put(cf, key, value).await
+    }
 }
