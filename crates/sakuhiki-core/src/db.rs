@@ -3,23 +3,9 @@ use std::{future::Future, ops::RangeBounds};
 use futures_util::Stream;
 
 use crate::{
-    Backend, Datum, Index,
+    Backend, Index, IndexError,
     backend::{RoTransaction as _, RwTransaction as _},
 };
-
-#[derive(Debug, thiserror::Error)]
-pub enum RebuildIndexError<B, I>
-where
-    B: Backend,
-    I: Index<B>,
-{
-    // TODO: improve on this
-    #[error(transparent)]
-    Backend(B::Error),
-
-    #[error(transparent)]
-    Parsing(<I::Datum as Datum<B>>::Error),
-}
 
 pub struct Db<B> {
     backend: B,
@@ -36,7 +22,7 @@ where
     pub async fn rebuild_index<I: Index<B>>(
         &self,
         _index: &I,
-    ) -> Result<(), RebuildIndexError<B, I>> {
+    ) -> Result<(), IndexError<B, I::Datum>> {
         // Note: NEED TO BLOCK PUTS WHILE THE TRANSACTION IS IN PROGRESS
         todo!()
     }
