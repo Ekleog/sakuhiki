@@ -60,7 +60,7 @@ macro_rules! transaction_impl {
     };
 }
 
-impl sakuhiki::Backend for MemDb {
+impl sakuhiki_core::Backend for MemDb {
     type Error = Error;
 
     type Key<'op> = &'op [u8];
@@ -144,11 +144,11 @@ macro_rules! ro_transaction_methods {
     };
 }
 
-impl<'t> sakuhiki::backend::RoTransaction<'t, MemDb> for Transaction {
+impl<'t> sakuhiki_core::backend::RoTransaction<'t, MemDb> for Transaction {
     ro_transaction_methods!(RoCf);
 }
 
-impl<'t> sakuhiki::backend::RwTransaction<'t, MemDb> for Transaction {
+impl<'t> sakuhiki_core::backend::RwTransaction<'t, MemDb> for Transaction {
     ro_transaction_methods!(RwCf);
 
     type PutFuture<'op>

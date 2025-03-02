@@ -22,7 +22,7 @@ repository = "https://github.com/Ekleog/sakuhiki"
 rust-version = "1.85.0"
 
 [workspace.dependencies]
-sakuhiki = { path = "crates/sakuhiki" }
+sakuhiki-core = { path = "crates/sakuhiki-core" }
 
 async-lock = "3.4"
 futures-util = "0.3.31"

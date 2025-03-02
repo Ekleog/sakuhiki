@@ -13,7 +13,7 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-sakuhiki.workspace = true
+sakuhiki-core.workspace = true
 
 async-lock.workspace = true
 futures-util.workspace = true
