@@ -4,34 +4,34 @@ use futures_util::Stream;
 
 macro_rules! ro_transaction_fns {
     ($t:lifetime, $cf:ident) => {
-        type GetFuture<'db, 'key>: Future<Output = Result<Option<B::Value<'db>>, B::Error>>
+        type GetFuture<'op, 'key>: Future<Output = Result<Option<B::Value<'op>>, B::Error>>
         where
-            $t: 'db,
-            'db: 'key;
+            $t: 'op,
+            'op: 'key;
 
-        fn get<'db, 'key>(
-            &'db mut self,
-            cf: &'db mut B::$cf<$t>,
+        fn get<'op, 'key>(
+            &'op mut self,
+            cf: &'op mut B::$cf<$t>,
             key: &'key [u8],
-        ) -> Self::GetFuture<'db, 'key>
+        ) -> Self::GetFuture<'op, 'key>
         where
-            $t: 'db,
-            'db: 'key;
+            $t: 'op,
+            'op: 'key;
 
-        type ScanStream<'db, 'keys>: Stream<Item = Result<(B::Key<'db>, B::Value<'db>), B::Error>>
+        type ScanStream<'op, 'keys>: Stream<Item = Result<(B::Key<'op>, B::Value<'op>), B::Error>>
         where
-            $t: 'db,
-            'db: 'keys;
+            $t: 'op,
+            'op: 'keys;
 
         // TODO: do we need get_many / multi_get?
-        fn scan<'db, 'keys>(
-            &'db mut self,
-            cf: &'db mut B::$cf<$t>,
+        fn scan<'op, 'keys>(
+            &'op mut self,
+            cf: &'op mut B::$cf<$t>,
             keys: impl 'keys + RangeBounds<[u8]>,
-        ) -> Self::ScanStream<'db, 'keys>
+        ) -> Self::ScanStream<'op, 'keys>
         where
-            't: 'db,
-            'db: 'keys;
+            't: 'op,
+            'op: 'keys;
     };
 }
 
@@ -50,30 +50,30 @@ where
 {
     ro_transaction_fns!('t, RwTransactionCf);
 
-    type PutFuture<'db>: Future<Output = Result<(), B::Error>>
+    type PutFuture<'op>: Future<Output = Result<(), B::Error>>
     where
-        't: 'db;
+        't: 'op;
 
-    fn put<'db>(
-        &'db mut self,
-        cf: &'db mut B::RwTransactionCf<'t>,
-        key: &'db [u8],
-        value: &'db [u8],
-    ) -> Self::PutFuture<'db>
+    fn put<'op>(
+        &'op mut self,
+        cf: &'op mut B::RwTransactionCf<'t>,
+        key: &'op [u8],
+        value: &'op [u8],
+    ) -> Self::PutFuture<'op>
     where
-        't: 'db;
+        't: 'op;
 
-    type DeleteFuture<'db>: Future<Output = Result<(), B::Error>>
+    type DeleteFuture<'op>: Future<Output = Result<(), B::Error>>
     where
-        't: 'db;
+        't: 'op;
 
-    fn delete<'db>(
-        &'db mut self,
-        cf: &'db mut B::RwTransactionCf<'t>,
-        key: &'db [u8],
-    ) -> Self::DeleteFuture<'db>
+    fn delete<'op>(
+        &'op mut self,
+        cf: &'op mut B::RwTransactionCf<'t>,
+        key: &'op [u8],
+    ) -> Self::DeleteFuture<'op>
     where
-        't: 'db;
+        't: 'op;
 }
 
 macro_rules! transaction_fn {
@@ -109,13 +109,13 @@ pub trait Backend {
     where
         Self: 'db;
 
-    type Key<'db>: AsRef<[u8]>
+    type Key<'op>: AsRef<[u8]>
     where
-        Self: 'db;
+        Self: 'op;
 
-    type Value<'db>: AsRef<[u8]>
+    type Value<'op>: AsRef<[u8]>
     where
-        Self: 'db;
+        Self: 'op;
 
     type CfHandleFuture<'db>: Future<Output = Result<Self::Cf<'db>, Self::Error>>
     where

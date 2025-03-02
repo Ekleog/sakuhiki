@@ -1,12 +1,12 @@
 use std::{
     collections::BTreeMap,
-    future::{ready, Future, Ready},
+    future::{Future, Ready, ready},
     ops::RangeBounds,
     pin::Pin,
 };
 
 use async_lock::RwLock;
-use futures_util::{stream, Stream};
+use futures_util::{Stream, stream};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -26,15 +26,15 @@ pub struct MemDb {
 impl sakuhiki::Backend for MemDb {
     type Error = Error;
 
-    type Key<'db> = &'db [u8];
+    type Key<'op> = &'op [u8];
 
-    type Value<'db> = &'db [u8];
+    type Value<'op> = &'op [u8];
 
     type Cf<'db> = String;
     type RoTransactionCf<'t> = RoCf<'t>;
     type RwTransactionCf<'t> = RwCf<'t>;
 
-    type CfHandleFuture<'db> = Ready<Result<Self::Cf<'db>, Self::Error>>;
+    type CfHandleFuture<'op> = Ready<Result<Self::Cf<'op>, Self::Error>>;
 
     fn cf_handle<'db>(&'db self, name: &str) -> Self::CfHandleFuture<'db> {
         ready(Ok(name.to_string()))
@@ -126,37 +126,37 @@ pub struct Transaction {
 
 macro_rules! ro_transaction_methods {
     ($cf:ident) => {
-        type GetFuture<'db, 'key>
-            = Ready<Result<Option<&'db [u8]>, Error>>
+        type GetFuture<'op, 'key>
+            = Ready<Result<Option<&'op [u8]>, Error>>
         where
-            't: 'db,
-            'db: 'key;
+            't: 'op,
+            'op: 'key;
 
-        fn get<'db, 'key>(
-            &'db mut self,
-            cf: &'db mut $cf<'t>,
+        fn get<'op, 'key>(
+            &'op mut self,
+            cf: &'op mut $cf<'t>,
             key: &'key [u8],
-        ) -> Self::GetFuture<'db, 'key>
+        ) -> Self::GetFuture<'op, 'key>
         where
-            'db: 'key,
+            'op: 'key,
         {
             ready(Ok(cf.get(key).map(|v| v.as_slice())))
         }
 
-        type ScanStream<'db, 'keys>
-            = Pin<Box<dyn 'keys + Stream<Item = Result<(&'db [u8], &'db [u8]), Error>>>>
+        type ScanStream<'op, 'keys>
+            = Pin<Box<dyn 'keys + Stream<Item = Result<(&'op [u8], &'op [u8]), Error>>>>
         where
-            't: 'db,
-            'db: 'keys;
+            't: 'op,
+            'op: 'keys;
 
-        fn scan<'db, 'keys>(
-            &'db mut self,
-            cf: &'db mut $cf<'t>,
+        fn scan<'op, 'keys>(
+            &'op mut self,
+            cf: &'op mut $cf<'t>,
             keys: impl 'keys + RangeBounds<[u8]>,
-        ) -> Self::ScanStream<'db, 'keys>
+        ) -> Self::ScanStream<'op, 'keys>
         where
-            't: 'db,
-            'db: 'keys,
+            't: 'op,
+            'op: 'keys,
         {
             Box::pin(stream::iter(
                 cf.range(keys)
@@ -173,32 +173,32 @@ impl<'t> sakuhiki::backend::RoTransaction<'t, MemDb> for Transaction {
 impl<'t> sakuhiki::backend::RwTransaction<'t, MemDb> for Transaction {
     ro_transaction_methods!(RwCf);
 
-    type PutFuture<'db>
+    type PutFuture<'op>
         = Ready<Result<(), Error>>
     where
-        't: 'db;
+        't: 'op;
 
-    fn put<'db>(
-        &'db mut self,
-        cf: &'db mut RwCf<'t>,
-        key: &'db [u8],
-        value: &'db [u8],
-    ) -> Self::PutFuture<'db>
+    fn put<'op>(
+        &'op mut self,
+        cf: &'op mut RwCf<'t>,
+        key: &'op [u8],
+        value: &'op [u8],
+    ) -> Self::PutFuture<'op>
     where
-        't: 'db,
+        't: 'op,
     {
         cf.insert(key.to_vec(), value.to_vec());
         ready(Ok(()))
     }
 
-    type DeleteFuture<'db>
+    type DeleteFuture<'op>
         = Ready<Result<(), Error>>
     where
-        't: 'db;
+        't: 'op;
 
-    fn delete<'db>(&'db mut self, cf: &'db mut RwCf<'t>, key: &'db [u8]) -> Self::DeleteFuture<'db>
+    fn delete<'op>(&'op mut self, cf: &'op mut RwCf<'t>, key: &'op [u8]) -> Self::DeleteFuture<'op>
     where
-        't: 'db,
+        't: 'op,
     {
         cf.remove(key);
         ready(Ok(()))

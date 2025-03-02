@@ -62,23 +62,23 @@ where
 
 macro_rules! ro_transaction_methods {
     ($cf:ident) => {
-        pub async fn get<'db, 'key>(
-            &'db mut self,
-            cf: &'db mut B::$cf<'t>,
+        pub async fn get<'op, 'key>(
+            &'op mut self,
+            cf: &'op mut B::$cf<'t>,
             key: &'key [u8],
-        ) -> Result<Option<B::Value<'db>>, B::Error> {
+        ) -> Result<Option<B::Value<'op>>, B::Error> {
             self.transaction.get(cf, key).await
         }
 
-        pub fn scan<'db, 'keys, Keys>(
-            &'db mut self,
-            cf: &'db mut B::$cf<'t>,
+        pub fn scan<'op, 'keys, Keys>(
+            &'op mut self,
+            cf: &'op mut B::$cf<'t>,
             keys: Keys,
-        ) -> impl Stream<Item = Result<(B::Key<'db>, B::Value<'db>), B::Error>>
-        + use<'t, 'db, 'keys, B, Keys>
+        ) -> impl Stream<Item = Result<(B::Key<'op>, B::Value<'op>), B::Error>>
+        + use<'t, 'op, 'keys, B, Keys>
         where
             Keys: 'keys + RangeBounds<[u8]>,
-            'db: 'keys,
+            'op: 'keys,
         {
             self.transaction.scan(cf, keys)
         }
@@ -105,19 +105,19 @@ where
 {
     ro_transaction_methods!(RwTransactionCf);
 
-    pub async fn put<'db>(
-        &'db mut self,
-        cf: &'db mut B::RwTransactionCf<'t>,
-        key: &'db [u8],
-        value: &'db [u8],
+    pub async fn put<'op>(
+        &'op mut self,
+        cf: &'op mut B::RwTransactionCf<'t>,
+        key: &'op [u8],
+        value: &'op [u8],
     ) -> Result<(), B::Error> {
         self.transaction.put(cf, key, value).await
     }
 
-    pub async fn delete<'db>(
-        &'db mut self,
-        cf: &'db mut B::RwTransactionCf<'t>,
-        key: &'db [u8],
+    pub async fn delete<'op>(
+        &'op mut self,
+        cf: &'op mut B::RwTransactionCf<'t>,
+        key: &'op [u8],
     ) -> Result<(), B::Error> {
         self.transaction.delete(cf, key).await
     }
