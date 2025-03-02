@@ -23,6 +23,43 @@ pub struct MemDb {
     db: BTreeMap<String, RwLock<ColumnFamily>>,
 }
 
+macro_rules! transaction_impl {
+    ($fn:ident, $iter:ident, $locker:ident, $mapper:expr, $cf:ident, $transac:ident, $transacfut:ident) => {
+        type $transac<'t> = Transaction;
+
+        // TODO(blocked): return impl Future (and in all the other Pin<Box<dyn Future<...>> too)
+        type $transacfut<'t, F, Return>
+            = Pin<Box<dyn 't + Future<Output = Result<Return, Self::Error>>>>
+        where
+            F: 't;
+
+        fn $fn<'fut, const CFS: usize, F, RetFut, Ret>(
+            &'fut self,
+            cfs: &'fut [&'fut Self::Cf<'fut>; CFS],
+            actions: F,
+        ) -> Self::$transacfut<'fut, F, Ret>
+        where
+            F: 'fut + for<'t> FnOnce(&'t mut Self::$transac<'t>, [$cf<'t>; CFS]) -> RetFut,
+            RetFut: Future<Output = Ret>,
+        {
+            Box::pin(async {
+                let mut t = Transaction { _private: () };
+                let mut cfs = cfs.iter().enumerate().collect::<Vec<_>>();
+                cfs.sort_by_key(|e| e.1);
+                let mut transaction_cfs = Vec::with_capacity(CFS);
+                for (i, &cf) in cfs {
+                    let cf = self.db.get(cf).ok_or(Error::NonExistentColumnFamily)?;
+                    transaction_cfs.push((i, cf.$locker().await));
+                }
+                transaction_cfs.sort_by_key(|e| e.0);
+                let transaction_cfs = transaction_cfs.$iter().map($mapper).collect::<Vec<_>>();
+                let transaction_cfs = transaction_cfs.try_into().unwrap();
+                Ok(actions(&mut t, transaction_cfs).await)
+            })
+        }
+    };
+}
+
 impl sakuhiki::Backend for MemDb {
     type Error = Error;
 
@@ -40,84 +77,25 @@ impl sakuhiki::Backend for MemDb {
         ready(Ok(name.to_string()))
     }
 
-    type RoTransaction<'t> = Transaction;
+    transaction_impl!(
+        ro_transaction,
+        iter,
+        read,
+        |(_, cf)| &**cf,
+        RoCf,
+        RoTransaction,
+        RoTransactionFuture
+    );
 
-    // TODO(blocked): return impl Future (and in all the other Pin<Box<dyn Future<...>> too)
-    type RoTransactionFuture<'t, F, Return>
-        = Pin<Box<dyn 't + Future<Output = Result<Return, Self::Error>>>>
-    where
-        F: 't;
-
-    fn ro_transaction<'fut, const CFS: usize, F, RetFut, Ret>(
-        &'fut self,
-        cfs: &'fut [&'fut Self::Cf<'fut>; CFS],
-        actions: F,
-    ) -> Self::RoTransactionFuture<'fut, F, Ret>
-    where
-        F: 'fut
-            + for<'t> FnOnce(
-                &'t mut Self::RoTransaction<'t>,
-                [Self::RoTransactionCf<'t>; CFS],
-            ) -> RetFut,
-        RetFut: Future<Output = Ret>,
-    {
-        Box::pin(async {
-            let mut t = Transaction { _private: () };
-            let mut cfs = cfs.iter().enumerate().collect::<Vec<_>>();
-            cfs.sort_by_key(|e| e.1);
-            let mut transaction_cfs = Vec::with_capacity(CFS);
-            for (i, &cf) in cfs {
-                let cf = self.db.get(cf).ok_or(Error::NonExistentColumnFamily)?;
-                transaction_cfs.push((i, cf.read().await));
-            }
-            transaction_cfs.sort_by_key(|e| e.0);
-            let transaction_cfs = transaction_cfs
-                .iter()
-                .map(|(_, cf)| &**cf)
-                .collect::<Vec<_>>();
-            let transaction_cfs = transaction_cfs.try_into().unwrap();
-            Ok(actions(&mut t, transaction_cfs).await)
-        })
-    }
-
-    type RwTransaction<'t> = Transaction;
-
-    type RwTransactionFuture<'t, F, Return>
-        = Pin<Box<dyn 't + Future<Output = Result<Return, Self::Error>>>>
-    where
-        F: 't;
-
-    fn rw_transaction<'fut, const CFS: usize, F, RetFut, Ret>(
-        &'fut self,
-        cfs: &'fut [&'fut Self::Cf<'fut>; CFS],
-        actions: F,
-    ) -> Self::RwTransactionFuture<'fut, F, Ret>
-    where
-        F: 'fut
-            + for<'t> FnOnce(
-                &'t mut Self::RwTransaction<'t>,
-                [Self::RwTransactionCf<'t>; CFS],
-            ) -> RetFut,
-        RetFut: Future<Output = Ret>,
-    {
-        Box::pin(async {
-            let mut t = Transaction { _private: () };
-            let mut cfs = cfs.iter().enumerate().collect::<Vec<_>>();
-            cfs.sort_by_key(|e| e.1);
-            let mut transaction_cfs = Vec::with_capacity(CFS);
-            for (i, &cf) in cfs {
-                let cf = self.db.get(cf).ok_or(Error::NonExistentColumnFamily)?;
-                transaction_cfs.push((i, cf.write().await));
-            }
-            transaction_cfs.sort_by_key(|e| e.0);
-            let transaction_cfs = transaction_cfs
-                .iter_mut()
-                .map(|(_, cf)| &mut **cf)
-                .collect::<Vec<_>>();
-            let transaction_cfs = transaction_cfs.try_into().unwrap();
-            Ok(actions(&mut t, transaction_cfs).await)
-        })
-    }
+    transaction_impl!(
+        rw_transaction,
+        iter_mut,
+        write,
+        |(_, cf)| &mut **cf,
+        RwCf,
+        RwTransaction,
+        RwTransactionFuture
+    );
 }
 
 pub struct Transaction {
