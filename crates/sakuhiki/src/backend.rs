@@ -2,9 +2,7 @@ use std::{future::Future, ops::RangeBounds};
 
 use futures_util::Stream;
 
-pub trait RoTransaction<Cf> {
-    type Error;
-
+pub trait RoTransaction<Cf, Error> {
     type Key<'db>: AsRef<[u8]>
     where
         Self: 'db,
@@ -15,7 +13,7 @@ pub trait RoTransaction<Cf> {
         Self: 'db,
         Cf: 'db;
 
-    type GetFuture<'key, 'db>: Future<Output = Result<Option<Self::Value<'db>>, Self::Error>>
+    type GetFuture<'key, 'db>: Future<Output = Result<Option<Self::Value<'db>>, Error>>
     where
         Self: 'db,
         Cf: 'db,
@@ -29,9 +27,7 @@ pub trait RoTransaction<Cf> {
     where
         'db: 'key;
 
-    type ScanStream<'keys, 'db>: Stream<
-        Item = Result<(Self::Key<'db>, Self::Value<'db>), Self::Error>,
-    >
+    type ScanStream<'keys, 'db>: Stream<Item = Result<(Self::Key<'db>, Self::Value<'db>), Error>>
     where
         Self: 'db,
         Cf: 'db,
@@ -47,8 +43,8 @@ pub trait RoTransaction<Cf> {
         'db: 'keys;
 }
 
-pub trait RwTransaction<Cf>: RoTransaction<Cf> {
-    type PutFuture<'db>: Future<Output = Result<(), Self::Error>>
+pub trait RwTransaction<Cf, Error>: RoTransaction<Cf, Error> {
+    type PutFuture<'db>: Future<Output = Result<(), Error>>
     where
         Self: 'db,
         Cf: 'db;
@@ -60,7 +56,7 @@ pub trait RwTransaction<Cf>: RoTransaction<Cf> {
         value: &'db [u8],
     ) -> Self::PutFuture<'db>;
 
-    type DeleteFuture<'db>: Future<Output = Result<(), Self::Error>>
+    type DeleteFuture<'db>: Future<Output = Result<(), Error>>
     where
         Self: 'db,
         Cf: 'db;
@@ -89,7 +85,7 @@ pub trait Backend {
 
     fn cf_handle<'db>(&'db self, name: &str) -> Self::CfHandleFuture<'db>;
 
-    type RoTransaction<'t>: RoTransaction<Self::RoTransactionCf<'t>>
+    type RoTransaction<'t>: RoTransaction<Self::RoTransactionCf<'t>, Self::Error>
     where
         Self: 't;
 
@@ -111,7 +107,7 @@ pub trait Backend {
             ) -> RetFut,
         RetFut: Future<Output = Ret>;
 
-    type RwTransaction<'t>: RwTransaction<Self::RwTransactionCf<'t>>
+    type RwTransaction<'t>: RwTransaction<Self::RwTransactionCf<'t>, Self::Error>
     where
         Self: 't;
 

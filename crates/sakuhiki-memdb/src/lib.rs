@@ -122,12 +122,10 @@ pub struct Transaction {
     _private: (),
 }
 
-impl<Cf> sakuhiki::backend::RoTransaction<Cf> for Transaction
+impl<Cf> sakuhiki::backend::RoTransaction<Cf, Error> for Transaction
 where
     Cf: Borrow<ColumnFamily>,
 {
-    type Error = std::convert::Infallible;
-
     type Key<'db>
         = &'db [u8]
     where
@@ -141,7 +139,7 @@ where
         Cf: 'db;
 
     type GetFuture<'key, 'db>
-        = Ready<Result<Option<Self::Key<'db>>, Self::Error>>
+        = Ready<Result<Option<Self::Key<'db>>, Error>>
     where
         Self: 'db,
         Cf: 'db,
@@ -155,8 +153,7 @@ where
     }
 
     type ScanStream<'keys, 'db>
-        =
-        Pin<Box<dyn 'keys + Stream<Item = Result<(Self::Key<'db>, Self::Value<'db>), Self::Error>>>>
+        = Pin<Box<dyn 'keys + Stream<Item = Result<(Self::Key<'db>, Self::Value<'db>), Error>>>>
     where
         Self: 'db,
         Cf: 'db,
@@ -179,12 +176,12 @@ where
     }
 }
 
-impl<Cf> sakuhiki::backend::RwTransaction<Cf> for Transaction
+impl<Cf> sakuhiki::backend::RwTransaction<Cf, Error> for Transaction
 where
     Cf: BorrowMut<ColumnFamily> + Borrow<ColumnFamily>,
 {
     type PutFuture<'db>
-        = Ready<Result<(), Self::Error>>
+        = Ready<Result<(), Error>>
     where
         Self: 'db,
         Cf: 'db;
@@ -200,7 +197,7 @@ where
     }
 
     type DeleteFuture<'db>
-        = Ready<Result<(), Self::Error>>
+        = Ready<Result<(), Error>>
     where
         Self: 'db,
         Cf: 'db;
