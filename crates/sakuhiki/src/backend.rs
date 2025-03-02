@@ -78,17 +78,12 @@ where
 
 macro_rules! transaction_fn {
     ($fn:ident, $cf:ident, $transac:ident, $transacfut:ident) => {
-        type $cf<'t>
-        where
-            Self: 't;
+        type $cf<'t>;
 
-        type $transac<'t>: $transac<'t, Self>
-        where
-            Self: 't;
+        type $transac<'t>: $transac<'t, Self>;
 
         type $transacfut<'t, F, Return>: Future<Output = Result<Return, Self::Error>>
         where
-            Self: 't,
             F: 't;
 
         fn $fn<'fut, const CFS: usize, F, RetFut, Ret>(
@@ -102,24 +97,16 @@ macro_rules! transaction_fn {
     };
 }
 
-pub trait Backend {
+pub trait Backend: 'static {
     type Error;
 
-    type Cf<'db>
-    where
-        Self: 'db;
+    type Cf<'db>;
 
-    type Key<'op>: AsRef<[u8]>
-    where
-        Self: 'op;
+    type Key<'op>: AsRef<[u8]>;
 
-    type Value<'op>: AsRef<[u8]>
-    where
-        Self: 'op;
+    type Value<'op>: AsRef<[u8]>;
 
-    type CfHandleFuture<'db>: Future<Output = Result<Self::Cf<'db>, Self::Error>>
-    where
-        Self: 'db;
+    type CfHandleFuture<'db>: Future<Output = Result<Self::Cf<'db>, Self::Error>>;
 
     fn cf_handle<'db>(&'db self, name: &str) -> Self::CfHandleFuture<'db>;
 
