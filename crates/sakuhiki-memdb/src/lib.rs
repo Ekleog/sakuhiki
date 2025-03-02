@@ -53,11 +53,14 @@ impl sakuhiki::Backend for MemDb {
     ) -> Self::RoTransactionFuture<'fut, F, Ret>
     where
         F: 'fut
-            + for<'t> FnOnce(&'t Self::RoTransaction<'t>, [Self::RoTransactionCf<'t>; CFS]) -> RetFut,
+            + for<'t> FnOnce(
+                &'t mut Self::RoTransaction<'t>,
+                [Self::RoTransactionCf<'t>; CFS],
+            ) -> RetFut,
         RetFut: Future<Output = Ret>,
     {
         Box::pin(async {
-            let t = Transaction { _private: () };
+            let mut t = Transaction { _private: () };
             let mut cfs = cfs.iter().enumerate().collect::<Vec<_>>();
             cfs.sort_by_key(|e| e.1);
             let mut transaction_cfs = Vec::with_capacity(CFS);
@@ -71,7 +74,7 @@ impl sakuhiki::Backend for MemDb {
                 .map(|(_, cf)| &**cf)
                 .collect::<Vec<_>>();
             let transaction_cfs = transaction_cfs.try_into().unwrap();
-            Ok(actions(&t, transaction_cfs).await)
+            Ok(actions(&mut t, transaction_cfs).await)
         })
     }
 
@@ -89,11 +92,14 @@ impl sakuhiki::Backend for MemDb {
     ) -> Self::RwTransactionFuture<'fut, F, Ret>
     where
         F: 'fut
-            + for<'t> FnOnce(&'t Self::RwTransaction<'t>, [Self::RwTransactionCf<'t>; CFS]) -> RetFut,
+            + for<'t> FnOnce(
+                &'t mut Self::RwTransaction<'t>,
+                [Self::RwTransactionCf<'t>; CFS],
+            ) -> RetFut,
         RetFut: Future<Output = Ret>,
     {
         Box::pin(async {
-            let t = Transaction { _private: () };
+            let mut t = Transaction { _private: () };
             let mut cfs = cfs.iter().enumerate().collect::<Vec<_>>();
             cfs.sort_by_key(|e| e.1);
             let mut transaction_cfs = Vec::with_capacity(CFS);
@@ -107,7 +113,7 @@ impl sakuhiki::Backend for MemDb {
                 .map(|(_, cf)| &mut **cf)
                 .collect::<Vec<_>>();
             let transaction_cfs = transaction_cfs.try_into().unwrap();
-            Ok(actions(&t, transaction_cfs).await)
+            Ok(actions(&mut t, transaction_cfs).await)
         })
     }
 }

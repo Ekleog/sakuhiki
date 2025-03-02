@@ -105,7 +105,10 @@ pub trait Backend {
     ) -> Self::RoTransactionFuture<'fut, F, Ret>
     where
         F: 'fut
-            + for<'t> FnOnce(&'t Self::RoTransaction<'t>, [Self::RoTransactionCf<'t>; CFS]) -> RetFut,
+            + for<'t> FnOnce(
+                &'t mut Self::RoTransaction<'t>,
+                [Self::RoTransactionCf<'t>; CFS],
+            ) -> RetFut,
         RetFut: Future<Output = Ret>;
 
     type RwTransaction<'t>: RwTransaction<Self::RwTransactionCf<'t>>
@@ -124,6 +127,9 @@ pub trait Backend {
     ) -> Self::RwTransactionFuture<'fut, F, Ret>
     where
         F: 'fut
-            + for<'t> FnOnce(&'t Self::RwTransaction<'t>, [Self::RwTransactionCf<'t>; CFS]) -> RetFut,
+            + for<'t> FnOnce(
+                &'t mut Self::RwTransaction<'t>,
+                [Self::RwTransactionCf<'t>; CFS],
+            ) -> RetFut,
         RetFut: Future<Output = Ret>;
 }
