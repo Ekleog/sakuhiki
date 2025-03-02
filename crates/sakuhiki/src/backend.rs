@@ -76,6 +76,32 @@ where
         't: 'db;
 }
 
+macro_rules! transaction_fn {
+    ($fn:ident, $cf:ident, $transac:ident, $transacfut:ident) => {
+        type $cf<'t>
+        where
+            Self: 't;
+
+        type $transac<'t>: $transac<'t, Self>
+        where
+            Self: 't;
+
+        type $transacfut<'t, F, Return>: Future<Output = Result<Return, Self::Error>>
+        where
+            Self: 't,
+            F: 't;
+
+        fn $fn<'fut, const CFS: usize, F, RetFut, Ret>(
+            &'fut self,
+            cfs: &'fut [&'fut Self::Cf<'fut>; CFS],
+            actions: F,
+        ) -> Self::$transacfut<'fut, F, Ret>
+        where
+            F: 'fut + for<'t> FnOnce(&'t mut Self::$transac<'t>, [Self::$cf<'t>; CFS]) -> RetFut,
+            RetFut: Future<Output = Ret>;
+    };
+}
+
 pub trait Backend {
     type Error;
 
@@ -91,61 +117,23 @@ pub trait Backend {
     where
         Self: 'db;
 
-    type RoTransactionCf<'t>
-    where
-        Self: 't;
-
-    type RwTransactionCf<'t>
-    where
-        Self: 't;
-
     type CfHandleFuture<'db>: Future<Output = Result<Self::Cf<'db>, Self::Error>>
     where
         Self: 'db;
 
     fn cf_handle<'db>(&'db self, name: &str) -> Self::CfHandleFuture<'db>;
 
-    type RoTransaction<'t>: RoTransaction<'t, Self>
-    where
-        Self: 't;
+    transaction_fn!(
+        ro_transaction,
+        RoTransactionCf,
+        RoTransaction,
+        RoTransactionFuture
+    );
 
-    type RoTransactionFuture<'t, F, Return>: Future<Output = Result<Return, Self::Error>>
-    where
-        Self: 't,
-        F: 't;
-
-    fn ro_transaction<'fut, const CFS: usize, F, RetFut, Ret>(
-        &'fut self,
-        cfs: &'fut [&'fut Self::Cf<'fut>; CFS],
-        actions: F,
-    ) -> Self::RoTransactionFuture<'fut, F, Ret>
-    where
-        F: 'fut
-            + for<'t> FnOnce(
-                &'t mut Self::RoTransaction<'t>,
-                [Self::RoTransactionCf<'t>; CFS],
-            ) -> RetFut,
-        RetFut: Future<Output = Ret>;
-
-    type RwTransaction<'t>: RwTransaction<'t, Self>
-    where
-        Self: 't;
-
-    type RwTransactionFuture<'t, F, Return>: Future<Output = Result<Return, Self::Error>>
-    where
-        Self: 't,
-        F: 't;
-
-    fn rw_transaction<'fut, const CFS: usize, F, RetFut, Ret>(
-        &'fut self,
-        cfs: &'fut [&'fut Self::Cf<'fut>; CFS],
-        actions: F,
-    ) -> Self::RwTransactionFuture<'fut, F, Ret>
-    where
-        F: 'fut
-            + for<'t> FnOnce(
-                &'t mut Self::RwTransaction<'t>,
-                [Self::RwTransactionCf<'t>; CFS],
-            ) -> RetFut,
-        RetFut: Future<Output = Ret>;
+    transaction_fn!(
+        rw_transaction,
+        RwTransactionCf,
+        RwTransaction,
+        RwTransactionFuture
+    );
 }
