@@ -12,14 +12,14 @@ categories = [
     "wasm",
 ]
 description = "Indexing overlay for any key-value store"
-edition = "2021"
+edition = "2024"
 homepage = "https://github.com/Ekleog/sakuhiki"
 keywords = ["database", "async", "web", "native"]
 license = "MIT OR Apache-2.0"
 readme = "./README.md"
 repository = "https://github.com/Ekleog/sakuhiki"
 # Remember to update the ci.yml file when updating this
-rust-version = "1.81.0"
+rust-version = "1.85.0"
 
 [workspace.dependencies]
 sakuhiki = { path = "crates/sakuhiki" }

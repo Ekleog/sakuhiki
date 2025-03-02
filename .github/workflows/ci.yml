@@ -18,7 +18,7 @@ jobs:
           - { name: Nightly, toolchain: "nightly" }
           - { name: Stable, toolchain: "stable" }
           # Remember to update the workspace Cargo.toml when editing this
-          - { name: MSRV, toolchain: "1.81.0" }
+          - { name: MSRV, toolchain: "1.85.0" }
     name: ${{ format('{0} ({1})', matrix.test.name, matrix.rust.name) }}
     runs-on: ubuntu-latest
     steps:
