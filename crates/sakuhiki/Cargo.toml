@@ -12,14 +12,5 @@ readme.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
-[features]
-db-indexed-db = ["sakuhiki-indexed-db"]
-db-memdb = ["sakuhiki-memdb"]
-db-rocksdb = ["sakuhiki-rocksdb"]
-
 [dependencies]
 sakuhiki-core.workspace = true
-
-sakuhiki-indexed-db = { workspace = true, optional = true }
-sakuhiki-memdb = { workspace = true, optional = true }
-sakuhiki-rocksdb = { workspace = true, optional = true }
