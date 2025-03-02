@@ -1,0 +1,25 @@
+[package]
+name = "sakuhiki"
+version = "0.1.0"
+authors.workspace = true
+categories.workspace = true
+description.workspace = true
+edition.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[features]
+db-indexed-db = ["sakuhiki-indexed-db"]
+db-memdb = ["sakuhiki-memdb"]
+db-rocksdb = ["sakuhiki-rocksdb"]
+
+[dependencies]
+sakuhiki-core.workspace = true
+
+sakuhiki-indexed-db = { workspace = true, optional = true }
+sakuhiki-memdb = { workspace = true, optional = true }
+sakuhiki-rocksdb = { workspace = true, optional = true }
