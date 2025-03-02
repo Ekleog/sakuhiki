@@ -2,7 +2,7 @@ use std::{future::Future, ops::RangeBounds};
 
 use futures_util::Stream;
 
-use crate::{backend::RoTransaction as _, Backend};
+use crate::{Backend, backend::RoTransaction as _, backend::RwTransaction as _};
 
 pub struct Db<B> {
     backend: B,
@@ -60,35 +60,48 @@ where
     transaction: &'t mut B::RoTransaction<'t>,
 }
 
+macro_rules! ro_transaction_methods {
+    ($cf:ident) => {
+        pub async fn get<'db, 'key>(
+            &'db mut self,
+            cf: &'db mut B::$cf<'t>,
+            key: &'key [u8],
+        ) -> Result<Option<B::Value<'db>>, B::Error> {
+            self.transaction.get(cf, key).await
+        }
+
+        pub fn scan<'db, 'keys, Keys>(
+            &'db mut self,
+            cf: &'db mut B::$cf<'t>,
+            keys: Keys,
+        ) -> impl Stream<Item = Result<(B::Key<'db>, B::Value<'db>), B::Error>>
+        + use<'t, 'db, 'keys, B, Keys>
+        where
+            Keys: 'keys + RangeBounds<[u8]>,
+            'db: 'keys,
+        {
+            self.transaction.scan(cf, keys)
+        }
+    };
+}
+
 impl<'t, B> RoTransaction<'t, B>
 where
     B: Backend,
 {
-    pub async fn get<'db, 'key>(
-        &'db mut self,
-        cf: &'db mut B::RoTransactionCf<'t>,
-        key: &'key [u8],
-    ) -> Result<Option<B::Value<'db>>, B::Error> {
-        self.transaction.get(cf, key).await
-    }
-
-    pub fn scan<'db, 'keys, Keys>(
-        &'db mut self,
-        cf: &'db mut B::RoTransactionCf<'t>,
-        keys: Keys,
-    ) -> impl Stream<Item = Result<(B::Key<'db>, B::Value<'db>), B::Error>> + use<'t, 'db, 'keys, B, Keys>
-    where
-        Keys: 'keys + RangeBounds<[u8]>,
-        'db: 'keys,
-    {
-        self.transaction.scan(cf, keys)
-    }
+    ro_transaction_methods!(RoTransactionCf);
 }
 
 pub struct RwTransaction<'t, B>
 where
     B: 't + Backend,
 {
-    #[allow(unused)]
     transaction: &'t mut B::RwTransaction<'t>,
+}
+
+impl<'t, B> RwTransaction<'t, B>
+where
+    B: Backend,
+{
+    ro_transaction_methods!(RwTransactionCf);
 }
