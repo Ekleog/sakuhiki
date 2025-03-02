@@ -2,72 +2,89 @@ use std::{future::Future, ops::RangeBounds};
 
 use futures_util::Stream;
 
-pub trait RoTransaction<Cf, Error> {
-    type Key<'db>: AsRef<[u8]>
-    where
-        Self: 'db,
-        Cf: 'db;
+macro_rules! ro_transaction_fns {
+    ($t:lifetime, $cf:ident) => {
+        type GetFuture<'db, 'key>: Future<Output = Result<Option<B::Value<'db>>, B::Error>>
+        where
+            Self: 'db,
+            B: $t,
+            $t: 'db,
+            'db: 'key;
 
-    type Value<'db>: AsRef<[u8]>
-    where
-        Self: 'db,
-        Cf: 'db;
+        fn get<'db, 'key>(
+            &'db mut self,
+            cf: &'db mut B::$cf<$t>,
+            key: &'key [u8],
+        ) -> Self::GetFuture<'db, 'key>
+        where
+            Self: 'db,
+            'db: 'key;
 
-    type GetFuture<'key, 'db>: Future<Output = Result<Option<Self::Value<'db>>, Error>>
-    where
-        Self: 'db,
-        Cf: 'db,
-        'db: 'key;
+        type ScanStream<'db, 'keys>: Stream<Item = Result<(B::Key<'db>, B::Value<'db>), B::Error>>
+        where
+            Self: 'db,
+            B: $t,
+            $t: 'db,
+            'db: 'keys;
 
-    fn get<'db, 'key>(
-        &'db mut self,
-        cf: &'db mut Cf,
-        key: &'key [u8],
-    ) -> Self::GetFuture<'key, 'db>
-    where
-        'db: 'key;
-
-    type ScanStream<'keys, 'db>: Stream<Item = Result<(Self::Key<'db>, Self::Value<'db>), Error>>
-    where
-        Self: 'db,
-        Cf: 'db,
-        'db: 'keys;
-
-    // TODO: do we need get_many / multi_get?
-    fn scan<'db, 'keys>(
-        &'db mut self,
-        cf: &'db mut Cf,
-        keys: impl 'keys + RangeBounds<[u8]>,
-    ) -> Self::ScanStream<'keys, 'db>
-    where
-        'db: 'keys;
+        // TODO: do we need get_many / multi_get?
+        fn scan<'db, 'keys>(
+            &'db mut self,
+            cf: &'db mut B::$cf<$t>,
+            keys: impl 'keys + RangeBounds<[u8]>,
+        ) -> Self::ScanStream<'db, 'keys>
+        where
+            Self: 'db,
+            't: 'db,
+            'db: 'keys;
+    };
 }
 
-pub trait RwTransaction<Cf, Error>: RoTransaction<Cf, Error> {
-    type PutFuture<'db>: Future<Output = Result<(), Error>>
+pub trait RoTransaction<'t, B: ?Sized + Backend> {
+    ro_transaction_fns!('t, RoTransactionCf);
+}
+
+pub trait RwTransaction<'t, B: ?Sized + Backend> {
+    ro_transaction_fns!('t, RwTransactionCf);
+
+    type PutFuture<'db>: Future<Output = Result<(), B::Error>>
     where
         Self: 'db,
-        Cf: 'db;
+        B: 't,
+        't: 'db;
 
     fn put<'db>(
         &'db mut self,
-        cf: &'db mut Cf,
+        cf: &'db mut B::RwTransactionCf<'t>,
         key: &'db [u8],
         value: &'db [u8],
     ) -> Self::PutFuture<'db>;
 
-    type DeleteFuture<'db>: Future<Output = Result<(), Error>>
+    type DeleteFuture<'db>: Future<Output = Result<(), B::Error>>
     where
         Self: 'db,
-        Cf: 'db;
+        B: 't,
+        't: 'db;
 
-    fn delete<'db>(&'db mut self, cf: &'db mut Cf, key: &'db [u8]) -> Self::DeleteFuture<'db>;
+    fn delete<'db>(
+        &'db mut self,
+        cf: &'db mut B::RwTransactionCf<'t>,
+        key: &'db [u8],
+    ) -> Self::DeleteFuture<'db>;
 }
 
 pub trait Backend {
     type Error;
 
     type Cf<'db>
+    where
+        Self: 'db;
+
+    type Key<'db>: AsRef<[u8]>
+    where
+        Self: 'db;
+
+    type Value<'db>: AsRef<[u8]>
     where
         Self: 'db;
 
@@ -85,7 +102,7 @@ pub trait Backend {
 
     fn cf_handle<'db>(&'db self, name: &str) -> Self::CfHandleFuture<'db>;
 
-    type RoTransaction<'t>: RoTransaction<Self::RoTransactionCf<'t>, Self::Error>
+    type RoTransaction<'t>: RoTransaction<'t, Self>
     where
         Self: 't;
 
@@ -107,7 +124,7 @@ pub trait Backend {
             ) -> RetFut,
         RetFut: Future<Output = Ret>;
 
-    type RwTransaction<'t>: RwTransaction<Self::RwTransactionCf<'t>, Self::Error>
+    type RwTransaction<'t>: RwTransaction<'t, Self>
     where
         Self: 't;
 

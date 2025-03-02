@@ -2,10 +2,7 @@ use std::{future::Future, ops::RangeBounds};
 
 use futures_util::Stream;
 
-use crate::{
-    backend::{self, RoTransaction as _},
-    Backend,
-};
+use crate::{backend::RoTransaction as _, Backend};
 
 pub struct Db<B> {
     backend: B,
@@ -49,22 +46,12 @@ where
         RetFut: Future<Output = Ret>,
     {
         self.backend
-            .rw_transaction(cfs, move |_transaction, cfs| {
-                actions(&RwTransaction { _transaction }, cfs)
+            .rw_transaction(cfs, move |transaction, cfs| {
+                actions(&RwTransaction { transaction }, cfs)
             })
             .await
     }
 }
-
-pub type Key<'t, 'db, B> = <<B as Backend>::RoTransaction<'t> as backend::RoTransaction<
-    <B as Backend>::RoTransactionCf<'t>,
-    <B as Backend>::Error,
->>::Key<'db>;
-
-pub type Value<'t, 'db, B> = <<B as Backend>::RoTransaction<'t> as backend::RoTransaction<
-    <B as Backend>::RoTransactionCf<'t>,
-    <B as Backend>::Error,
->>::Value<'db>;
 
 pub struct RoTransaction<'t, B>
 where
@@ -81,16 +68,19 @@ where
         &'db mut self,
         cf: &'db mut B::RoTransactionCf<'t>,
         key: &'key [u8],
-    ) -> Result<Option<Value<'t, 'db, B>>, B::Error> {
+    ) -> Result<Option<B::Value<'db>>, B::Error> {
         self.transaction.get(cf, key).await
     }
 
-    pub fn scan<'db, 'keys>(
+    pub fn scan<'db, 'keys, Keys>(
         &'db mut self,
         cf: &'db mut B::RoTransactionCf<'t>,
-        keys: impl 'keys + RangeBounds<[u8]>,
-    ) -> impl 'keys + Stream<Item = Result<(Key<'t, 'db, B>, Value<'t, 'db, B>), B::Error>>
+        keys: Keys,
+    ) -> impl 'keys
+           + Stream<Item = Result<(B::Key<'db>, B::Value<'db>), B::Error>>
+           + use<'t, 'db, 'keys, B, Keys>
     where
+        Keys: 'keys + RangeBounds<[u8]>,
         'db: 'keys,
     {
         self.transaction.scan(cf, keys)
@@ -101,5 +91,6 @@ pub struct RwTransaction<'t, B>
 where
     B: 't + Backend,
 {
-    _transaction: &'t mut B::RwTransaction<'t>,
+    #[allow(unused)]
+    transaction: &'t mut B::RwTransaction<'t>,
 }
