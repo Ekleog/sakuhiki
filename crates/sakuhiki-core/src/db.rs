@@ -1,7 +1,6 @@
 use std::ops::RangeBounds;
 
-use futures_util::Stream;
-use waaa::Future;
+use waaa::{Future, Stream};
 
 use crate::{
     Backend, Index, IndexError,
@@ -90,8 +89,7 @@ macro_rules! ro_transaction_methods {
             &'op mut self,
             cf: &'op mut B::$cf<'t>,
             keys: Keys,
-        ) -> impl waaa::Send
-        + Stream<Item = Result<(B::Key<'op>, B::Value<'op>), B::Error>>
+        ) -> impl Stream<Item = Result<(B::Key<'op>, B::Value<'op>), B::Error>>
         + use<'t, 'op, 'keys, B, Keys>
         where
             Keys: 'keys + RangeBounds<[u8]>,

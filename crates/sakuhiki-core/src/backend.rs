@@ -1,7 +1,6 @@
 use std::ops::RangeBounds;
 
-use futures_util::Stream;
-use waaa::Future;
+use waaa::{Future, Stream};
 
 macro_rules! ro_transaction_fns {
     ($t:lifetime, $cf:ident) => {
@@ -19,8 +18,7 @@ macro_rules! ro_transaction_fns {
             $t: 'op,
             'op: 'key;
 
-        type ScanStream<'op, 'keys>: waaa::Send
-            + Stream<Item = Result<(B::Key<'op>, B::Value<'op>), B::Error>>
+        type ScanStream<'op, 'keys>: Stream<Item = Result<(B::Key<'op>, B::Value<'op>), B::Error>>
         where
             $t: 'op,
             'op: 'keys;
