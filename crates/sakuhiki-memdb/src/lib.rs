@@ -1,12 +1,13 @@
 use std::{
     collections::BTreeMap,
-    future::{Future, Ready, ready},
+    future::{Ready, ready},
     ops::RangeBounds,
     pin::Pin,
 };
 
 use async_lock::RwLock;
 use futures_util::{Stream, stream};
+use waaa::Future;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -39,7 +40,9 @@ macro_rules! transaction_impl {
             actions: F,
         ) -> Self::$transacfut<'fut, F, Ret>
         where
-            F: 'fut + for<'t> FnOnce(&'t mut Self::$transac<'t>, [$cf<'t>; CFS]) -> RetFut,
+            F: 'fut
+                + waaa::Send
+                + for<'t> FnOnce(&'t mut Self::$transac<'t>, [$cf<'t>; CFS]) -> RetFut,
             RetFut: Future<Output = Ret>,
         {
             Box::pin(async {
@@ -122,7 +125,7 @@ macro_rules! ro_transaction_methods {
         }
 
         type ScanStream<'op, 'keys>
-            = Pin<Box<dyn 'keys + Stream<Item = Result<(&'op [u8], &'op [u8]), Error>>>>
+            = Pin<Box<dyn 'keys + Send + Stream<Item = Result<(&'op [u8], &'op [u8]), Error>>>>
         where
             't: 'op,
             'op: 'keys;

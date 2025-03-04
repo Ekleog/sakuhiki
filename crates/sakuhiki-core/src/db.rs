@@ -1,6 +1,7 @@
-use std::{future::Future, ops::RangeBounds};
+use std::ops::RangeBounds;
 
 use futures_util::Stream;
+use waaa::Future;
 
 use crate::{
     Backend, Index, IndexError,
@@ -37,7 +38,9 @@ where
         actions: F,
     ) -> Result<Ret, B::Error>
     where
-        F: 'fut + for<'t> FnOnce(&RoTransaction<'t, B>, [B::RoTransactionCf<'t>; CFS]) -> RetFut,
+        F: 'fut
+            + waaa::Send
+            + for<'t> FnOnce(&RoTransaction<'t, B>, [B::RoTransactionCf<'t>; CFS]) -> RetFut,
         RetFut: Future<Output = Ret>,
     {
         self.backend
@@ -53,7 +56,9 @@ where
         actions: F,
     ) -> Result<Ret, B::Error>
     where
-        F: 'fut + for<'t> FnOnce(&RwTransaction<'t, B>, [B::RwTransactionCf<'t>; CFS]) -> RetFut,
+        F: 'fut
+            + waaa::Send
+            + for<'t> FnOnce(&RwTransaction<'t, B>, [B::RwTransactionCf<'t>; CFS]) -> RetFut,
         RetFut: Future<Output = Ret>,
     {
         self.backend
@@ -85,7 +90,8 @@ macro_rules! ro_transaction_methods {
             &'op mut self,
             cf: &'op mut B::$cf<'t>,
             keys: Keys,
-        ) -> impl Stream<Item = Result<(B::Key<'op>, B::Value<'op>), B::Error>>
+        ) -> impl waaa::Send
+        + Stream<Item = Result<(B::Key<'op>, B::Value<'op>), B::Error>>
         + use<'t, 'op, 'keys, B, Keys>
         where
             Keys: 'keys + RangeBounds<[u8]>,

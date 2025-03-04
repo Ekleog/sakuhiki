@@ -18,3 +18,4 @@ sakuhiki-core.workspace = true
 async-lock.workspace = true
 futures-util.workspace = true
 thiserror.workspace = true
+waaa.workspace = true
