@@ -2,6 +2,9 @@ use std::pin::Pin;
 
 use crate::{Backend, Datum, IndexError};
 
+// TODO: replace with waaa::BoxFuture once rustc stops giving this error message:
+// note: this is a known limitation that will be removed in the future (see issue #100013
+// <https://github.com/rust-lang/rust/issues/100013> for more information)
 pub type DynFuture<'fut, T> = Pin<Box<dyn 'fut + Future<Output = T>>>;
 
 pub trait Index<B: Backend> {
