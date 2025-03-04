@@ -4,7 +4,7 @@ use crate::{Backend, Index};
 
 pub trait Datum<B: Backend>
 where
-    Self: 'static + Sized,
+    Self: 'static + Sized + Send + Sync,
 {
     type Error: Debug + Error;
 

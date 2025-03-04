@@ -80,9 +80,9 @@ where
 
 macro_rules! transaction_fn {
     ($fn:ident, $cf:ident, $transac:ident, $transacfut:ident) => {
-        type $cf<'t>;
+        type $cf<'t>: waaa::Send;
 
-        type $transac<'t>: $transac<'t, Self>;
+        type $transac<'t>: waaa::Send + $transac<'t, Self>;
 
         type $transacfut<'t, F, Return>: Future<Output = Result<Return, Self::Error>>
         where
