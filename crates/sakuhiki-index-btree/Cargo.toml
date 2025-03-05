@@ -14,3 +14,8 @@ rust-version.workspace = true
 
 [dependencies]
 sakuhiki-core.workspace = true
+
+[dev-dependencies]
+sakuhiki-memdb.workspace = true
+
+tokio = { workspace = true, features = ["macros", "rt"] }

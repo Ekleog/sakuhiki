@@ -10,6 +10,17 @@ pub struct BTreeIndex<D, KeyExtractor> {
     _phantom: PhantomData<fn(D)>,
 }
 
+impl<D, KeyExtractor> BTreeIndex<D, KeyExtractor> {
+    pub const fn new(cf: &'static str, key_extractor: KeyExtractor, delimiter: Option<u8>) -> Self {
+        Self {
+            cf,
+            key_extractor,
+            delimiter,
+            _phantom: PhantomData,
+        }
+    }
+}
+
 impl<B, D, KeyExtractor, K> Index<B> for BTreeIndex<D, KeyExtractor>
 where
     B: Backend,
@@ -89,5 +100,37 @@ where
             }
             Ok(())
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct Datum {
+        value: u32,
+    }
+
+    impl<B: Backend> sakuhiki_core::Datum<B> for Datum {
+        type Error = std::convert::Infallible;
+
+        const CF: &'static str = "datum";
+
+        const INDICES: &'static [&'static dyn Index<B, Datum = Self>] =
+            &[&BTreeIndex::<Datum, _>::new(
+                "index",
+                |d: &Datum| d.value.to_be_bytes(),
+                None,
+            )];
+
+        fn from_slice(_datum: &[u8]) -> Result<Self, Self::Error> {
+            todo!()
+        }
+    }
+
+    #[tokio::test]
+    async fn test_index() {
+        let _db = sakuhiki_memdb::MemDb::new();
+        // TODO
     }
 }

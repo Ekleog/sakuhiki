@@ -24,6 +24,14 @@ pub struct MemDb {
     db: BTreeMap<String, RwLock<ColumnFamily>>,
 }
 
+impl MemDb {
+    pub fn new() -> Self {
+        Self {
+            db: BTreeMap::new(),
+        }
+    }
+}
+
 macro_rules! transaction_impl {
     ($fn:ident, $iter:ident, $locker:ident, $mapper:expr, $cf:ident, $transac:ident, $transacfut:ident) => {
         type $transac<'t> = Transaction;
