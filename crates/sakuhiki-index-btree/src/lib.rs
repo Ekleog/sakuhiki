@@ -7,7 +7,7 @@ pub struct BTreeIndex<D, KeyExtractor> {
     cf: &'static str,
     key_extractor: KeyExtractor,
     delimiter: Option<u8>,
-    _phantom: PhantomData<D>,
+    _phantom: PhantomData<fn(D)>,
 }
 
 impl<B, D, KeyExtractor, K> Index<B> for BTreeIndex<D, KeyExtractor>
