@@ -4,7 +4,7 @@ pub mod backend;
 pub use backend::Backend;
 
 mod datum;
-pub use datum::{Datum, DatumFromSlice};
+pub use datum::{Datum, IndexedDatum};
 
 mod db;
 pub use db::{Db, RoTransaction, RwTransaction};

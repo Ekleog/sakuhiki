@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use sakuhiki_core::{Backend, Datum, Index, backend::RwTransaction};
+use sakuhiki_core::{Backend, Index, IndexedDatum, backend::RwTransaction};
 
 // TODO: add sub-index, instead of forcing the object key
 pub struct BTreeIndex<D, KeyExtractor> {
@@ -24,7 +24,7 @@ impl<D, KeyExtractor> BTreeIndex<D, KeyExtractor> {
 impl<B, D, KeyExtractor, K> Index<B> for BTreeIndex<D, KeyExtractor>
 where
     B: Backend,
-    D: Datum<B>,
+    D: IndexedDatum<B>,
     KeyExtractor: waaa::Send + waaa::Sync + Fn(&D) -> K,
     K: waaa::Send + AsRef<[u8]>,
 {
@@ -107,7 +107,7 @@ where
 mod tests {
     use std::io;
 
-    use sakuhiki_core::DatumFromSlice as _;
+    use sakuhiki_core::Datum as _;
 
     use super::*;
 
@@ -130,7 +130,8 @@ mod tests {
         }
     }
 
-    impl sakuhiki_core::DatumFromSlice for Datum {
+    impl sakuhiki_core::Datum for Datum {
+        const CF: &'static str = "datum";
         type Error = io::Error;
         fn from_slice(datum: &[u8]) -> Result<Self, Self::Error> {
             if datum.len() != 8 {
@@ -146,8 +147,7 @@ mod tests {
         }
     }
 
-    impl<B: Backend> sakuhiki_core::Datum<B> for Datum {
-        const CF: &'static str = "datum";
+    impl<B: Backend> sakuhiki_core::IndexedDatum<B> for Datum {
         const INDICES: &'static [&'static dyn Index<B, Datum = Self>] = &[
             &BTreeIndex::<Datum, _>::new("datum-foo", |d: &Datum| d.foo.to_be_bytes(), None),
             &BTreeIndex::<Datum, _>::new("datum-bar", |d: &Datum| d.bar.to_be_bytes(), None),
