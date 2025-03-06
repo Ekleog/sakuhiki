@@ -169,12 +169,17 @@ mod tests {
         // let index_bar = db.cf_handle("datum-bar").await.unwrap();
         db.rw_transaction(&[&datum], |mut t, [mut datum]| {
             Box::pin(async move {
-                t.put(&mut datum, b"12", &Datum::new(1, 2).to_array())
-                    .await
-                    .unwrap();
+                let d12 = Datum::new(1, 2);
+                let d21 = Datum::new(2, 1);
+                t.put(&mut datum, b"12", &d12.to_array()).await.unwrap();
+                t.put(&mut datum, b"21", &d21.to_array()).await.unwrap();
                 assert_eq!(
                     Datum::from_slice(t.get(&mut datum, b"12").await.unwrap().unwrap()).unwrap(),
-                    Datum::new(1, 2)
+                    d12
+                );
+                assert_eq!(
+                    Datum::from_slice(t.get(&mut datum, b"21").await.unwrap().unwrap()).unwrap(),
+                    d21
                 );
             })
         })
