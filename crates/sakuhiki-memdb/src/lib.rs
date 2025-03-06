@@ -22,6 +22,12 @@ pub struct MemDb {
     db: BTreeMap<String, RwLock<ColumnFamily>>,
 }
 
+impl Default for MemDb {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MemDb {
     pub fn new() -> Self {
         Self {
