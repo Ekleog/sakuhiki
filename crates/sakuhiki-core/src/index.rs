@@ -1,4 +1,4 @@
-use crate::{Backend, Datum, IndexError};
+use crate::{Backend, Datum, DatumFromSlice, IndexError};
 
 pub trait Index<B: Backend>: waaa::Send + waaa::Sync {
     type Datum: Datum<B>;

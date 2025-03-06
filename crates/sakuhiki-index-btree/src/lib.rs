@@ -105,32 +105,81 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::io;
+
+    use sakuhiki_core::DatumFromSlice as _;
+
     use super::*;
 
+    #[derive(Debug, Eq, PartialEq)]
     struct Datum {
-        value: u32,
+        foo: u32,
+        bar: u32,
+    }
+
+    impl Datum {
+        fn new(foo: u32, bar: u32) -> Self {
+            Self { foo, bar }
+        }
+
+        fn to_array(&self) -> [u8; 8] {
+            let mut array = [0; 8];
+            array[..4].copy_from_slice(&self.foo.to_be_bytes());
+            array[4..].copy_from_slice(&self.bar.to_be_bytes());
+            array
+        }
+    }
+
+    impl sakuhiki_core::DatumFromSlice for Datum {
+        type Error = io::Error;
+        fn from_slice(datum: &[u8]) -> Result<Self, Self::Error> {
+            if datum.len() != 8 {
+                return Err(io::Error::other(format!(
+                    "expected 8-long slice, got {} bytes",
+                    datum.len()
+                )));
+            }
+            Ok(Self {
+                foo: u32::from_be_bytes(datum[..4].try_into().unwrap()),
+                bar: u32::from_be_bytes(datum[4..].try_into().unwrap()),
+            })
+        }
     }
 
     impl<B: Backend> sakuhiki_core::Datum<B> for Datum {
-        type Error = std::convert::Infallible;
-
         const CF: &'static str = "datum";
-
-        const INDICES: &'static [&'static dyn Index<B, Datum = Self>] =
-            &[&BTreeIndex::<Datum, _>::new(
-                "index",
-                |d: &Datum| d.value.to_be_bytes(),
-                None,
-            )];
-
-        fn from_slice(_datum: &[u8]) -> Result<Self, Self::Error> {
-            todo!()
-        }
+        const INDICES: &'static [&'static dyn Index<B, Datum = Self>] = &[
+            &BTreeIndex::<Datum, _>::new("datum-foo", |d: &Datum| d.foo.to_be_bytes(), None),
+            &BTreeIndex::<Datum, _>::new("datum-bar", |d: &Datum| d.bar.to_be_bytes(), None),
+        ];
     }
 
     #[tokio::test]
     async fn test_index() {
-        let _db = sakuhiki_memdb::MemDb::new();
+        // TODO: Should have a better migration story for adding/removing indices
+        // Maybe just have create_cf be added to backend and auto-rebuilding?
+        let mut backend = sakuhiki_memdb::MemDb::new();
+        backend.create_cf("datum");
+        backend.create_cf("datum-foo");
+        backend.create_cf("datum-bar");
+        let db = sakuhiki_core::Db::new(backend);
+        let datum = db.cf_handle("datum").await.unwrap();
+        // TODO: will need this
+        // let index_foo = db.cf_handle("datum-foo").await.unwrap();
+        // let index_bar = db.cf_handle("datum-bar").await.unwrap();
+        db.rw_transaction(&[&datum], |mut t, [mut datum]| {
+            Box::pin(async move {
+                t.put(&mut datum, b"12", &Datum::new(1, 2).to_array())
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    Datum::from_slice(t.get(&mut datum, b"12").await.unwrap().unwrap()).unwrap(),
+                    Datum::new(1, 2)
+                );
+            })
+        })
+        .await
+        .unwrap();
         // TODO
     }
 }

@@ -28,6 +28,11 @@ impl MemDb {
             db: BTreeMap::new(),
         }
     }
+
+    pub fn create_cf(&mut self, cf: &'static str) {
+        self.db
+            .insert(cf.to_string(), RwLock::new(ColumnFamily::new()));
+    }
 }
 
 macro_rules! transaction_impl {
