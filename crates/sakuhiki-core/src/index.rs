@@ -1,13 +1,6 @@
-use std::pin::Pin;
-
 use crate::{Backend, Datum, IndexError};
 
-// TODO: replace with waaa::BoxFuture once rustc stops giving this error message:
-// note: this is a known limitation that will be removed in the future (see issue #100013
-// <https://github.com/rust-lang/rust/issues/100013> for more information)
-pub type DynFuture<'fut, T> = Pin<Box<dyn 'fut + Future<Output = T>>>;
-
-pub trait Index<B: Backend> {
+pub trait Index<B: Backend>: waaa::Send + waaa::Sync {
     type Datum: Datum<B>;
 
     fn cf(&self) -> &'static str;
@@ -18,7 +11,7 @@ pub trait Index<B: Backend> {
         datum: &'fut Self::Datum,
         transaction: &'fut mut B::RwTransaction<'t>,
         cf: &'fut mut B::RwTransactionCf<'t>,
-    ) -> DynFuture<'fut, Result<(), B::Error>>;
+    ) -> waaa::BoxFuture<'fut, Result<(), B::Error>>;
 
     fn unindex<'fut, 't>(
         &'fut self,
@@ -26,7 +19,7 @@ pub trait Index<B: Backend> {
         datum: &'fut Self::Datum,
         transaction: &'fut mut B::RwTransaction<'t>,
         cf: &'fut mut B::RwTransactionCf<'t>,
-    ) -> DynFuture<'fut, Result<(), B::Error>>;
+    ) -> waaa::BoxFuture<'fut, Result<(), B::Error>>;
 
     fn index_from_slice<'fut, 't>(
         &'fut self,
@@ -34,7 +27,7 @@ pub trait Index<B: Backend> {
         slice: &'fut [u8],
         transaction: &'fut mut B::RwTransaction<'t>,
         cf: &'fut mut B::RwTransactionCf<'t>,
-    ) -> DynFuture<'fut, Result<(), IndexError<B, Self::Datum>>> {
+    ) -> waaa::BoxFuture<'fut, Result<(), IndexError<B, Self::Datum>>> {
         Box::pin(async move {
             let datum = Self::Datum::from_slice(slice).map_err(IndexError::Parsing)?;
             self.index(key, &datum, transaction, cf)
@@ -49,7 +42,7 @@ pub trait Index<B: Backend> {
         slice: &'fut [u8],
         transaction: &'fut mut B::RwTransaction<'t>,
         cf: &'fut mut B::RwTransactionCf<'t>,
-    ) -> DynFuture<'fut, Result<(), IndexError<B, Self::Datum>>> {
+    ) -> waaa::BoxFuture<'fut, Result<(), IndexError<B, Self::Datum>>> {
         Box::pin(async move {
             let datum = Self::Datum::from_slice(slice).map_err(IndexError::Parsing)?;
             self.unindex(key, &datum, transaction, cf)

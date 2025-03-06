@@ -1,6 +1,6 @@
 use std::ops::RangeBounds;
 
-use waaa::{Future, Stream};
+use waaa::Stream;
 
 use crate::{
     Backend, Index, IndexError,
@@ -31,7 +31,7 @@ where
         self.backend.cf_handle(name).await
     }
 
-    pub async fn ro_transaction<'fut, const CFS: usize, F, RetFut, Ret>(
+    pub async fn ro_transaction<'fut, const CFS: usize, F, Ret>(
         &'fut self,
         cfs: &'fut [&'fut B::Cf<'fut>; CFS],
         actions: F,
@@ -39,17 +39,19 @@ where
     where
         F: 'fut
             + waaa::Send
-            + for<'t> FnOnce(&RoTransaction<'t, B>, [B::RoTransactionCf<'t>; CFS]) -> RetFut,
-        RetFut: Future<Output = Ret>,
+            + for<'t> FnOnce(
+                RoTransaction<'t, B>,
+                [B::RoTransactionCf<'t>; CFS],
+            ) -> waaa::BoxFuture<'t, Ret>,
     {
         self.backend
             .ro_transaction(cfs, move |transaction, cfs| {
-                actions(&RoTransaction { transaction }, cfs)
+                actions(RoTransaction { transaction }, cfs)
             })
             .await
     }
 
-    pub async fn rw_transaction<'fut, const CFS: usize, F, RetFut, Ret>(
+    pub async fn rw_transaction<'fut, const CFS: usize, F, Ret>(
         &'fut self,
         cfs: &'fut [&'fut B::Cf<'fut>; CFS],
         actions: F,
@@ -57,12 +59,14 @@ where
     where
         F: 'fut
             + waaa::Send
-            + for<'t> FnOnce(&RwTransaction<'t, B>, [B::RwTransactionCf<'t>; CFS]) -> RetFut,
-        RetFut: Future<Output = Ret>,
+            + for<'t> FnOnce(
+                RwTransaction<'t, B>,
+                [B::RwTransactionCf<'t>; CFS],
+            ) -> waaa::BoxFuture<'t, Ret>,
     {
         self.backend
             .rw_transaction(cfs, move |transaction, cfs| {
-                actions(&RwTransaction { transaction }, cfs)
+                actions(RwTransaction { transaction }, cfs)
             })
             .await
     }

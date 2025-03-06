@@ -2,12 +2,10 @@ use std::{
     collections::BTreeMap,
     future::{Ready, ready},
     ops::RangeBounds,
-    pin::Pin,
 };
 
 use async_lock::RwLock;
-use futures_util::{Stream, stream};
-use waaa::Future;
+use futures_util::stream;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -33,25 +31,21 @@ impl MemDb {
 }
 
 macro_rules! transaction_impl {
-    ($fn:ident, $iter:ident, $locker:ident, $mapper:expr, $cf:ident, $transac:ident, $transacfut:ident) => {
+    ($fn:ident, $iter:ident, $locker:ident, $mapper:expr, $cf:ident, $transac:ident) => {
         type $transac<'t> = Transaction;
 
-        // TODO(blocked): return impl Future (and in all the other Pin<Box<dyn Future<...>> too)
-        type $transacfut<'t, F, Return>
-            = Pin<Box<dyn 't + Future<Output = Result<Return, Self::Error>>>>
-        where
-            F: 't;
-
-        fn $fn<'fut, const CFS: usize, F, RetFut, Ret>(
+        fn $fn<'fut, const CFS: usize, F, Ret>(
             &'fut self,
             cfs: &'fut [&'fut Self::Cf<'fut>; CFS],
             actions: F,
-        ) -> Self::$transacfut<'fut, F, Ret>
+        ) -> waaa::BoxFuture<'fut, Result<Ret, Self::Error>>
         where
             F: 'fut
                 + waaa::Send
-                + for<'t> FnOnce(&'t mut Self::$transac<'t>, [$cf<'t>; CFS]) -> RetFut,
-            RetFut: Future<Output = Ret>,
+                + for<'t> FnOnce(
+                    &'t mut Self::$transac<'t>,
+                    [$cf<'t>; CFS],
+                ) -> waaa::BoxFuture<'t, Ret>,
         {
             Box::pin(async {
                 let mut t = Transaction { _private: () };
@@ -94,8 +88,7 @@ impl sakuhiki_core::Backend for MemDb {
         read,
         |(_, cf)| &**cf,
         RoCf,
-        RoTransaction,
-        RoTransactionFuture
+        RoTransaction
     );
 
     transaction_impl!(
@@ -104,8 +97,7 @@ impl sakuhiki_core::Backend for MemDb {
         write,
         |(_, cf)| &mut **cf,
         RwCf,
-        RwTransaction,
-        RwTransactionFuture
+        RwTransaction
     );
 }
 
@@ -115,34 +107,22 @@ pub struct Transaction {
 
 macro_rules! ro_transaction_methods {
     ($cf:ident) => {
-        type GetFuture<'op, 'key>
-            = Ready<Result<Option<&'op [u8]>, Error>>
-        where
-            't: 'op,
-            'op: 'key;
-
         fn get<'op, 'key>(
             &'op mut self,
             cf: &'op mut $cf<'t>,
             key: &'key [u8],
-        ) -> Self::GetFuture<'op, 'key>
+        ) -> waaa::BoxFuture<'key, Result<Option<&'op [u8]>, Error>>
         where
             'op: 'key,
         {
-            ready(Ok(cf.get(key).map(|v| v.as_slice())))
+            Box::pin(ready(Ok(cf.get(key).map(|v| v.as_slice()))))
         }
-
-        type ScanStream<'op, 'keys>
-            = Pin<Box<dyn 'keys + Send + Stream<Item = Result<(&'op [u8], &'op [u8]), Error>>>>
-        where
-            't: 'op,
-            'op: 'keys;
 
         fn scan<'op, 'keys>(
             &'op mut self,
             cf: &'op mut $cf<'t>,
             keys: impl 'keys + RangeBounds<[u8]>,
-        ) -> Self::ScanStream<'op, 'keys>
+        ) -> waaa::BoxStream<'keys, Result<(&'op [u8], &'op [u8]), Error>>
         where
             't: 'op,
             'op: 'keys,
@@ -162,34 +142,28 @@ impl<'t> sakuhiki_core::backend::RoTransaction<'t, MemDb> for Transaction {
 impl<'t> sakuhiki_core::backend::RwTransaction<'t, MemDb> for Transaction {
     ro_transaction_methods!(RwCf);
 
-    type PutFuture<'op>
-        = Ready<Result<(), Error>>
-    where
-        't: 'op;
-
     fn put<'op>(
         &'op mut self,
         cf: &'op mut RwCf<'t>,
         key: &'op [u8],
         value: &'op [u8],
-    ) -> Self::PutFuture<'op>
+    ) -> waaa::BoxFuture<'op, Result<(), Error>>
     where
         't: 'op,
     {
         cf.insert(key.to_vec(), value.to_vec());
-        ready(Ok(()))
+        Box::pin(ready(Ok(())))
     }
 
-    type DeleteFuture<'op>
-        = Ready<Result<(), Error>>
-    where
-        't: 'op;
-
-    fn delete<'op>(&'op mut self, cf: &'op mut RwCf<'t>, key: &'op [u8]) -> Self::DeleteFuture<'op>
+    fn delete<'op>(
+        &'op mut self,
+        cf: &'op mut RwCf<'t>,
+        key: &'op [u8],
+    ) -> waaa::BoxFuture<'op, Result<(), Error>>
     where
         't: 'op,
     {
         cf.remove(key);
-        ready(Ok(()))
+        Box::pin(ready(Ok(())))
     }
 }

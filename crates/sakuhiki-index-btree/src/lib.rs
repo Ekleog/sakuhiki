@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use sakuhiki_core::{Backend, Datum, DynFuture, Index, backend::RwTransaction};
+use sakuhiki_core::{Backend, Datum, Index, backend::RwTransaction};
 
 // TODO: add sub-index, instead of forcing the object key
 pub struct BTreeIndex<D, KeyExtractor> {
@@ -25,8 +25,8 @@ impl<B, D, KeyExtractor, K> Index<B> for BTreeIndex<D, KeyExtractor>
 where
     B: Backend,
     D: Datum<B>,
-    KeyExtractor: Fn(&D) -> K,
-    K: AsRef<[u8]>,
+    KeyExtractor: waaa::Send + waaa::Sync + Fn(&D) -> K,
+    K: waaa::Send + AsRef<[u8]>,
 {
     type Datum = D;
 
@@ -40,7 +40,7 @@ where
         datum: &'fut Self::Datum,
         transaction: &'fut mut B::RwTransaction<'t>,
         cf: &'fut mut B::RwTransactionCf<'t>,
-    ) -> DynFuture<'fut, Result<(), B::Error>> {
+    ) -> waaa::BoxFuture<'fut, Result<(), B::Error>> {
         Box::pin(async move {
             let index = (self.key_extractor)(datum);
             let index = index.as_ref();
@@ -74,7 +74,7 @@ where
         datum: &'fut Self::Datum,
         transaction: &'fut mut B::RwTransaction<'t>,
         cf: &'fut mut B::RwTransactionCf<'t>,
-    ) -> DynFuture<'fut, Result<(), B::Error>> {
+    ) -> waaa::BoxFuture<'fut, Result<(), B::Error>> {
         Box::pin(async move {
             let index = (self.key_extractor)(datum);
             let index = index.as_ref();

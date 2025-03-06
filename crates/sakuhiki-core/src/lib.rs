@@ -1,3 +1,5 @@
+// TODO: look once more at removing all the Pin<Box<...>> when possible
+
 pub mod backend;
 pub use backend::Backend;
 
@@ -11,4 +13,4 @@ mod errors;
 pub use errors::IndexError;
 
 mod index;
-pub use index::{DynFuture, Index};
+pub use index::Index;
