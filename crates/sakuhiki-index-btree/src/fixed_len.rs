@@ -64,7 +64,7 @@ where
                 .extract_key(datum, &mut index_key[prev_len..]);
             if do_index {
                 index_key.extend(object_key);
-                transaction.put(cf, &index_key, &[]).await?;
+                transaction.put(cf, index_key, &[]).await?;
             }
             Ok(())
         })
@@ -86,7 +86,7 @@ where
                 .extract_key(datum, &mut index_key[prev_len..]);
             if do_unindex {
                 index_key.extend(object_key);
-                transaction.delete(cf, &index_key).await?;
+                transaction.delete(cf, index_key).await?;
             }
             Ok(())
         })
