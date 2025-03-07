@@ -7,6 +7,15 @@ pub struct EndIndex<D> {
     _phantom: PhantomData<fn(D)>,
 }
 
+impl<D> EndIndex<D> {
+    pub const fn new(cfs: &'static [&'static str; 1]) -> Self {
+        Self {
+            cfs,
+            _phantom: PhantomData,
+        }
+    }
+}
+
 impl<B, D> Index<B> for EndIndex<D>
 where
     B: Backend,

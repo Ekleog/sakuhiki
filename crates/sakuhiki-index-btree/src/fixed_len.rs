@@ -1,4 +1,4 @@
-use sakuhiki_core::{Backend, Datum, Index, backend::RwTransaction};
+use sakuhiki_core::{Backend, Datum, Index};
 
 pub trait FixedLenKeyExtractor: waaa::Send + waaa::Sync {
     type Datum: Datum;
@@ -21,31 +21,34 @@ pub trait FixedLenKeyExtractor: waaa::Send + waaa::Sync {
     }
 }
 
-// TODO: add sub-index, instead of forcing the object key
-pub struct FixedLenBTreeIndex<K> {
-    cfs: &'static [&'static str; 1],
+pub struct FixedLenBTreeIndex<K, I> {
     key_extractor: K,
+    sub_index: I,
 }
 
-impl<K> FixedLenBTreeIndex<K> {
-    pub const fn new(cfs: &'static [&'static str; 1], key_extractor: K) -> Self {
-        Self { cfs, key_extractor }
+impl<K, I> FixedLenBTreeIndex<K, I> {
+    pub const fn new(key_extractor: K, sub_index: I) -> Self {
+        Self {
+            key_extractor,
+            sub_index,
+        }
     }
 }
 
-impl<B, K> Index<B> for FixedLenBTreeIndex<K>
+impl<B, K, I> Index<B> for FixedLenBTreeIndex<K, I>
 where
     B: Backend,
     K: FixedLenKeyExtractor,
+    I: Index<B, Datum = K::Datum>,
 {
     type Datum = K::Datum;
 
     fn cfs(&self) -> &'static [&'static str] {
-        self.cfs
+        self.sub_index.cfs()
     }
 
-    fn index_key_len(&self, object_key: &[u8], _datum: &Self::Datum) -> usize {
-        K::LEN + object_key.len()
+    fn index_key_len(&self, object_key: &[u8], datum: &Self::Datum) -> usize {
+        K::LEN + self.sub_index.index_key_len(object_key, datum)
     }
 
     fn index<'fut, 't>(
@@ -54,17 +57,18 @@ where
         datum: &'fut Self::Datum,
         transaction: &'fut mut B::RwTransaction<'t>,
         cf: &'fut mut B::RwTransactionCf<'t>,
-        index_key: &'fut mut Vec<u8>,
+        index_key_prefix: &'fut mut Vec<u8>,
     ) -> waaa::BoxFuture<'fut, Result<(), B::Error>> {
         Box::pin(async move {
-            let prev_len = index_key.len();
-            index_key.resize(prev_len + K::LEN, 0);
+            let prev_len = index_key_prefix.len();
+            index_key_prefix.resize(prev_len + K::LEN, 0);
             let do_index = self
                 .key_extractor
-                .extract_key(datum, &mut index_key[prev_len..]);
+                .extract_key(datum, &mut index_key_prefix[prev_len..]);
             if do_index {
-                index_key.extend(object_key);
-                transaction.put(cf, index_key, &[]).await?;
+                self.sub_index
+                    .index(object_key, datum, transaction, cf, index_key_prefix)
+                    .await?;
             }
             Ok(())
         })
@@ -76,17 +80,18 @@ where
         datum: &'fut Self::Datum,
         transaction: &'fut mut B::RwTransaction<'t>,
         cf: &'fut mut B::RwTransactionCf<'t>,
-        index_key: &'fut mut Vec<u8>,
+        index_key_prefix: &'fut mut Vec<u8>,
     ) -> waaa::BoxFuture<'fut, Result<(), B::Error>> {
         Box::pin(async move {
-            let prev_len = index_key.len();
-            index_key.resize(prev_len + K::LEN, 0);
+            let prev_len = index_key_prefix.len();
+            index_key_prefix.resize(prev_len + K::LEN, 0);
             let do_unindex = self
                 .key_extractor
-                .extract_key(datum, &mut index_key[prev_len..]);
+                .extract_key(datum, &mut index_key_prefix[prev_len..]);
             if do_unindex {
-                index_key.extend(object_key);
-                transaction.delete(cf, index_key).await?;
+                self.sub_index
+                    .unindex(object_key, datum, transaction, cf, index_key_prefix)
+                    .await?;
             }
             Ok(())
         })
@@ -99,7 +104,7 @@ where
 mod tests {
     use std::io;
 
-    use sakuhiki_core::Datum as _;
+    use sakuhiki_core::{Datum as _, EndIndex};
 
     use super::*;
 
@@ -160,10 +165,10 @@ mod tests {
     }
 
     impl Datum {
-        const INDEX_FOO: &'static FixedLenBTreeIndex<KeyFoo> =
-            &FixedLenBTreeIndex::new(&["datum-foo"], KeyFoo);
-        const INDEX_BAR: &'static FixedLenBTreeIndex<KeyBar> =
-            &FixedLenBTreeIndex::new(&["datum-bar"], KeyBar);
+        const INDEX_FOO: &'static FixedLenBTreeIndex<KeyFoo, EndIndex<Self>> =
+            &FixedLenBTreeIndex::new(KeyFoo, EndIndex::new(&["datum-foo"]));
+        const INDEX_BAR: &'static FixedLenBTreeIndex<KeyBar, EndIndex<Self>> =
+            &FixedLenBTreeIndex::new(KeyBar, EndIndex::new(&["datum-bar"]));
     }
 
     impl<B: Backend> sakuhiki_core::IndexedDatum<B> for Datum {
