@@ -44,19 +44,24 @@ where
         self.cfs
     }
 
+    fn index_key_len(&self, object_key: &[u8], _datum: &Self::Datum) -> usize {
+        K::LEN + object_key.len()
+    }
+
     fn index<'fut, 't>(
         &'fut self,
         object_key: &'fut [u8],
         datum: &'fut Self::Datum,
         transaction: &'fut mut B::RwTransaction<'t>,
         cf: &'fut mut B::RwTransactionCf<'t>,
+        index_key: &'fut mut Vec<u8>,
     ) -> waaa::BoxFuture<'fut, Result<(), B::Error>> {
         Box::pin(async move {
-            let mut index_key = Vec::with_capacity(K::LEN + object_key.len());
-            index_key.resize(K::LEN, 0);
+            let prev_len = index_key.len();
+            index_key.resize(prev_len + K::LEN, 0);
             let do_index = self
                 .key_extractor
-                .extract_key(datum, &mut index_key[0..K::LEN]);
+                .extract_key(datum, &mut index_key[prev_len..]);
             if do_index {
                 index_key.extend(object_key);
                 transaction.put(cf, &index_key, &[]).await?;
@@ -71,13 +76,14 @@ where
         datum: &'fut Self::Datum,
         transaction: &'fut mut B::RwTransaction<'t>,
         cf: &'fut mut B::RwTransactionCf<'t>,
+        index_key: &'fut mut Vec<u8>,
     ) -> waaa::BoxFuture<'fut, Result<(), B::Error>> {
         Box::pin(async move {
-            let mut index_key = Vec::with_capacity(K::LEN + object_key.len());
-            index_key.resize(K::LEN, 0);
+            let prev_len = index_key.len();
+            index_key.resize(prev_len + K::LEN, 0);
             let do_unindex = self
                 .key_extractor
-                .extract_key(datum, &mut index_key[0..K::LEN]);
+                .extract_key(datum, &mut index_key[prev_len..]);
             if do_unindex {
                 index_key.extend(object_key);
                 transaction.delete(cf, &index_key).await?;
@@ -86,7 +92,7 @@ where
         })
     }
 
-    // TODO: implement (un)index_from_slice with the KeyExtractor-specific method
+    // TODO: implement _from_slice variants with the KeyExtractor-specific method
 }
 
 #[cfg(test)]
