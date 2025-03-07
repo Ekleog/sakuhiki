@@ -6,20 +6,14 @@ use sakuhiki_core::{Backend, Index, IndexedDatum, backend::RwTransaction};
 pub struct FixedLenBTreeIndex<D, KeyExtractor> {
     cfs: &'static [&'static str; 1],
     key_extractor: KeyExtractor,
-    delimiter: Option<u8>,
     _phantom: PhantomData<fn(D)>,
 }
 
 impl<D, KeyExtractor> FixedLenBTreeIndex<D, KeyExtractor> {
-    pub const fn new(
-        cfs: &'static [&'static str; 1],
-        key_extractor: KeyExtractor,
-        delimiter: Option<u8>,
-    ) -> Self {
+    pub const fn new(cfs: &'static [&'static str; 1], key_extractor: KeyExtractor) -> Self {
         Self {
             cfs,
             key_extractor,
-            delimiter,
             _phantom: PhantomData,
         }
     }
@@ -48,26 +42,10 @@ where
         Box::pin(async move {
             let index = (self.key_extractor)(datum);
             let index = index.as_ref();
-            match self.delimiter {
-                None => {
-                    let mut index_key = Vec::with_capacity(index.len() + key.len());
-                    index_key.extend(index);
-                    index_key.extend(key);
-                    transaction.put(cf, &index_key, key).await?;
-                }
-                Some(delimiter) => {
-                    let mut index_key = Vec::with_capacity(index.len() * 2 + 1 + key.len());
-                    for c in index {
-                        index_key.push(*c);
-                        if *c == delimiter {
-                            index_key.push(delimiter);
-                        }
-                    }
-                    index_key.push(delimiter);
-                    index_key.extend(key);
-                    transaction.put(cf, &index_key, key).await?;
-                }
-            }
+            let mut index_key = Vec::with_capacity(index.len() + key.len());
+            index_key.extend(index);
+            index_key.extend(key);
+            transaction.put(cf, &index_key, key).await?;
             Ok(())
         })
     }
@@ -82,26 +60,10 @@ where
         Box::pin(async move {
             let index = (self.key_extractor)(datum);
             let index = index.as_ref();
-            match self.delimiter {
-                None => {
-                    let mut index_key = Vec::with_capacity(index.len() + key.len());
-                    index_key.extend(index);
-                    index_key.extend(key);
-                    transaction.delete(cf, &index_key).await?;
-                }
-                Some(delimiter) => {
-                    let mut index_key = Vec::with_capacity(index.len() * 2 + 1 + key.len());
-                    for c in index {
-                        index_key.push(*c);
-                        if *c == delimiter {
-                            index_key.push(delimiter);
-                        }
-                    }
-                    index_key.push(delimiter);
-                    index_key.extend(key);
-                    transaction.delete(cf, &index_key).await?;
-                }
-            }
+            let mut index_key = Vec::with_capacity(index.len() + key.len());
+            index_key.extend(index);
+            index_key.extend(key);
+            transaction.delete(cf, &index_key).await?;
             Ok(())
         })
     }
@@ -163,16 +125,8 @@ mod tests {
 
     impl<B: Backend> sakuhiki_core::IndexedDatum<B> for Datum {
         const INDICES: &'static [&'static dyn Index<B, Datum = Self>] = &[
-            &FixedLenBTreeIndex::<Datum, _>::new(
-                &["datum-foo"],
-                |d: &Datum| d.foo.to_be_bytes(),
-                None,
-            ),
-            &FixedLenBTreeIndex::<Datum, _>::new(
-                &["datum-bar"],
-                |d: &Datum| d.bar.to_be_bytes(),
-                None,
-            ),
+            &FixedLenBTreeIndex::<Datum, _>::new(&["datum-foo"], |d: &Datum| d.foo.to_be_bytes()),
+            &FixedLenBTreeIndex::<Datum, _>::new(&["datum-bar"], |d: &Datum| d.bar.to_be_bytes()),
         ];
     }
 
