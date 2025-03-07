@@ -1,7 +1,7 @@
-use crate::{Backend, Datum, IndexError, IndexedDatum};
+use crate::{Backend, Datum, IndexError};
 
 pub trait Index<B: Backend>: waaa::Send + waaa::Sync {
-    type Datum: IndexedDatum<B>;
+    type Datum: Datum;
 
     fn cfs(&self) -> &'static [&'static str];
 

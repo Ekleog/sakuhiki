@@ -1,10 +1,10 @@
-use crate::{Backend, IndexedDatum};
+use crate::{Backend, Datum};
 
 #[derive(Debug, thiserror::Error)]
 pub enum IndexError<B, D>
 where
     B: Backend,
-    D: IndexedDatum<B>,
+    D: Datum,
 {
     // TODO: improve on this
     #[error(transparent)]

@@ -1,32 +1,44 @@
-use std::marker::PhantomData;
+use sakuhiki_core::{Backend, Datum, Index, backend::RwTransaction};
 
-use sakuhiki_core::{Backend, Index, IndexedDatum, backend::RwTransaction};
+pub trait FixedLenKeyExtractor: waaa::Send + waaa::Sync {
+    type Datum: Datum;
 
-// TODO: add sub-index, instead of forcing the object key
-pub struct FixedLenBTreeIndex<D, KeyExtractor> {
-    cfs: &'static [&'static str; 1],
-    key_extractor: KeyExtractor,
-    _phantom: PhantomData<fn(D)>,
-}
+    const LEN: usize;
 
-impl<D, KeyExtractor> FixedLenBTreeIndex<D, KeyExtractor> {
-    pub const fn new(cfs: &'static [&'static str; 1], key_extractor: KeyExtractor) -> Self {
-        Self {
-            cfs,
-            key_extractor,
-            _phantom: PhantomData,
-        }
+    // TODO(blocked): should take &mut [u8; Self::LEN], but const generics are not there yet
+    /// Returns `true` iff `datum` must be part of the index.
+    fn extract_key(&self, datum: &Self::Datum, key: &mut [u8]) -> bool;
+
+    /// Returns `true` iff `datum` must be part of the index.
+    fn extract_key_from_slice(
+        &self,
+        datum: &[u8],
+        key: &mut [u8],
+    ) -> Result<(), <Self::Datum as Datum>::Error> {
+        let datum = Self::Datum::from_slice(datum)?;
+        self.extract_key(&datum, key);
+        Ok(())
     }
 }
 
-impl<B, D, KeyExtractor, K> Index<B> for FixedLenBTreeIndex<D, KeyExtractor>
+// TODO: add sub-index, instead of forcing the object key
+pub struct FixedLenBTreeIndex<K> {
+    cfs: &'static [&'static str; 1],
+    key_extractor: K,
+}
+
+impl<K> FixedLenBTreeIndex<K> {
+    pub const fn new(cfs: &'static [&'static str; 1], key_extractor: K) -> Self {
+        Self { cfs, key_extractor }
+    }
+}
+
+impl<B, K> Index<B> for FixedLenBTreeIndex<K>
 where
     B: Backend,
-    D: IndexedDatum<B>,
-    KeyExtractor: waaa::Send + waaa::Sync + Fn(&D) -> K,
-    K: waaa::Send + AsRef<[u8]>,
+    K: FixedLenKeyExtractor,
 {
-    type Datum = D;
+    type Datum = K::Datum;
 
     fn cfs(&self) -> &'static [&'static str] {
         self.cfs
@@ -40,12 +52,15 @@ where
         cf: &'fut mut B::RwTransactionCf<'t>,
     ) -> waaa::BoxFuture<'fut, Result<(), B::Error>> {
         Box::pin(async move {
-            let index = (self.key_extractor)(datum);
-            let index = index.as_ref();
-            let mut index_key = Vec::with_capacity(index.len() + key.len());
-            index_key.extend(index);
-            index_key.extend(key);
-            transaction.put(cf, &index_key, key).await?;
+            let mut index_key = Vec::with_capacity(K::LEN + key.len());
+            index_key.resize(K::LEN, 0);
+            let do_index = self
+                .key_extractor
+                .extract_key(datum, &mut index_key[0..K::LEN]);
+            if do_index {
+                index_key.extend(key);
+                transaction.put(cf, &index_key, &[]).await?;
+            }
             Ok(())
         })
     }
@@ -58,15 +73,20 @@ where
         cf: &'fut mut B::RwTransactionCf<'t>,
     ) -> waaa::BoxFuture<'fut, Result<(), B::Error>> {
         Box::pin(async move {
-            let index = (self.key_extractor)(datum);
-            let index = index.as_ref();
-            let mut index_key = Vec::with_capacity(index.len() + key.len());
-            index_key.extend(index);
-            index_key.extend(key);
-            transaction.delete(cf, &index_key).await?;
+            let mut index_key = Vec::with_capacity(K::LEN + key.len());
+            index_key.resize(K::LEN, 0);
+            let do_unindex = self
+                .key_extractor
+                .extract_key(datum, &mut index_key[0..K::LEN]);
+            if do_unindex {
+                index_key.extend(key);
+                transaction.delete(cf, &index_key).await?;
+            }
             Ok(())
         })
     }
+
+    // TODO: implement (un)index_from_slice with the KeyExtractor-specific method
 }
 
 #[cfg(test)]
@@ -81,6 +101,26 @@ mod tests {
     struct Datum {
         foo: u32,
         bar: u32,
+    }
+
+    struct KeyFoo;
+    impl FixedLenKeyExtractor for KeyFoo {
+        type Datum = Datum;
+        const LEN: usize = 4;
+        fn extract_key(&self, datum: &Self::Datum, key: &mut [u8]) -> bool {
+            key.copy_from_slice(&datum.foo.to_be_bytes());
+            true
+        }
+    }
+
+    struct KeyBar;
+    impl FixedLenKeyExtractor for KeyBar {
+        type Datum = Datum;
+        const LEN: usize = 4;
+        fn extract_key(&self, datum: &Self::Datum, key: &mut [u8]) -> bool {
+            key.copy_from_slice(&datum.bar.to_be_bytes());
+            true
+        }
     }
 
     impl Datum {
@@ -113,21 +153,16 @@ mod tests {
         }
     }
 
-    #[allow(unused)] // TODO: remove once actually used
     impl Datum {
-        const fn index_foo<B: Backend>() -> &'static dyn Index<B, Datum = Self> {
-            <Self as sakuhiki_core::IndexedDatum<B>>::INDICES[0]
-        }
-        const fn index_bar<B: Backend>() -> &'static dyn Index<B, Datum = Self> {
-            <Self as sakuhiki_core::IndexedDatum<B>>::INDICES[1]
-        }
+        const INDEX_FOO: &'static FixedLenBTreeIndex<KeyFoo> =
+            &FixedLenBTreeIndex::new(&["datum-foo"], KeyFoo);
+        const INDEX_BAR: &'static FixedLenBTreeIndex<KeyBar> =
+            &FixedLenBTreeIndex::new(&["datum-bar"], KeyBar);
     }
 
     impl<B: Backend> sakuhiki_core::IndexedDatum<B> for Datum {
-        const INDICES: &'static [&'static dyn Index<B, Datum = Self>] = &[
-            &FixedLenBTreeIndex::<Datum, _>::new(&["datum-foo"], |d: &Datum| d.foo.to_be_bytes()),
-            &FixedLenBTreeIndex::<Datum, _>::new(&["datum-bar"], |d: &Datum| d.bar.to_be_bytes()),
-        ];
+        const INDICES: &'static [&'static dyn Index<B, Datum = Self>] =
+            &[Self::INDEX_FOO, Self::INDEX_BAR];
     }
 
     #[tokio::test]
