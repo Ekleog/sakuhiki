@@ -151,6 +151,16 @@ mod tests {
         }
     }
 
+    #[allow(unused)] // TODO: remove once actually used
+    impl Datum {
+        const fn index_foo<B: Backend>() -> &'static dyn Index<B, Datum = Self> {
+            <Self as sakuhiki_core::IndexedDatum<B>>::INDICES[0]
+        }
+        const fn index_bar<B: Backend>() -> &'static dyn Index<B, Datum = Self> {
+            <Self as sakuhiki_core::IndexedDatum<B>>::INDICES[1]
+        }
+    }
+
     impl<B: Backend> sakuhiki_core::IndexedDatum<B> for Datum {
         const INDICES: &'static [&'static dyn Index<B, Datum = Self>] = &[
             &BTreeIndex::<Datum, _>::new(&["datum-foo"], |d: &Datum| d.foo.to_be_bytes(), None),
