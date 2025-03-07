@@ -7,7 +7,7 @@ pub trait Index<B: Backend>: waaa::Send + waaa::Sync {
 
     fn index<'fut, 't>(
         &'fut self,
-        key: &'fut [u8],
+        object_key: &'fut [u8],
         datum: &'fut Self::Datum,
         transaction: &'fut mut B::RwTransaction<'t>,
         cf: &'fut mut B::RwTransactionCf<'t>,
@@ -15,7 +15,7 @@ pub trait Index<B: Backend>: waaa::Send + waaa::Sync {
 
     fn unindex<'fut, 't>(
         &'fut self,
-        key: &'fut [u8],
+        object_key: &'fut [u8],
         datum: &'fut Self::Datum,
         transaction: &'fut mut B::RwTransaction<'t>,
         cf: &'fut mut B::RwTransactionCf<'t>,
@@ -23,14 +23,14 @@ pub trait Index<B: Backend>: waaa::Send + waaa::Sync {
 
     fn index_from_slice<'fut, 't>(
         &'fut self,
-        key: &'fut [u8],
+        object_key: &'fut [u8],
         slice: &'fut [u8],
         transaction: &'fut mut B::RwTransaction<'t>,
         cf: &'fut mut B::RwTransactionCf<'t>,
     ) -> waaa::BoxFuture<'fut, Result<(), IndexError<B, Self::Datum>>> {
         Box::pin(async move {
             let datum = Self::Datum::from_slice(slice).map_err(IndexError::Parsing)?;
-            self.index(key, &datum, transaction, cf)
+            self.index(object_key, &datum, transaction, cf)
                 .await
                 .map_err(IndexError::Backend)
         })
@@ -38,14 +38,14 @@ pub trait Index<B: Backend>: waaa::Send + waaa::Sync {
 
     fn unindex_from_slice<'fut, 't>(
         &'fut self,
-        key: &'fut [u8],
+        object_key: &'fut [u8],
         slice: &'fut [u8],
         transaction: &'fut mut B::RwTransaction<'t>,
         cf: &'fut mut B::RwTransactionCf<'t>,
     ) -> waaa::BoxFuture<'fut, Result<(), IndexError<B, Self::Datum>>> {
         Box::pin(async move {
             let datum = Self::Datum::from_slice(slice).map_err(IndexError::Parsing)?;
-            self.unindex(key, &datum, transaction, cf)
+            self.unindex(object_key, &datum, transaction, cf)
                 .await
                 .map_err(IndexError::Backend)
         })

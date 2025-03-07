@@ -46,19 +46,19 @@ where
 
     fn index<'fut, 't>(
         &'fut self,
-        key: &'fut [u8],
+        object_key: &'fut [u8],
         datum: &'fut Self::Datum,
         transaction: &'fut mut B::RwTransaction<'t>,
         cf: &'fut mut B::RwTransactionCf<'t>,
     ) -> waaa::BoxFuture<'fut, Result<(), B::Error>> {
         Box::pin(async move {
-            let mut index_key = Vec::with_capacity(K::LEN + key.len());
+            let mut index_key = Vec::with_capacity(K::LEN + object_key.len());
             index_key.resize(K::LEN, 0);
             let do_index = self
                 .key_extractor
                 .extract_key(datum, &mut index_key[0..K::LEN]);
             if do_index {
-                index_key.extend(key);
+                index_key.extend(object_key);
                 transaction.put(cf, &index_key, &[]).await?;
             }
             Ok(())
@@ -67,19 +67,19 @@ where
 
     fn unindex<'fut, 't>(
         &'fut self,
-        key: &'fut [u8],
+        object_key: &'fut [u8],
         datum: &'fut Self::Datum,
         transaction: &'fut mut B::RwTransaction<'t>,
         cf: &'fut mut B::RwTransactionCf<'t>,
     ) -> waaa::BoxFuture<'fut, Result<(), B::Error>> {
         Box::pin(async move {
-            let mut index_key = Vec::with_capacity(K::LEN + key.len());
+            let mut index_key = Vec::with_capacity(K::LEN + object_key.len());
             index_key.resize(K::LEN, 0);
             let do_unindex = self
                 .key_extractor
                 .extract_key(datum, &mut index_key[0..K::LEN]);
             if do_unindex {
-                index_key.extend(key);
+                index_key.extend(object_key);
                 transaction.delete(cf, &index_key).await?;
             }
             Ok(())
