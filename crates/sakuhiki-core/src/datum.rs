@@ -1,6 +1,6 @@
 use std::{error::Error, fmt::Debug};
 
-use crate::{Backend, Index};
+use crate::{Backend, Indexer};
 
 pub trait Datum: 'static + Send + Sync + Sized {
     const CF: &'static str;
@@ -9,5 +9,5 @@ pub trait Datum: 'static + Send + Sync + Sized {
 }
 
 pub trait IndexedDatum<B: Backend>: 'static + Send + Sync + Datum {
-    const INDICES: &'static [&'static dyn Index<B, Datum = Self>];
+    const INDICES: &'static [&'static dyn Indexer<B, Datum = Self>];
 }

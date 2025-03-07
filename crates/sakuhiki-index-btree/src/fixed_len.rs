@@ -1,4 +1,6 @@
-use sakuhiki_core::{Backend, Datum, Index};
+use std::ops::{Bound, RangeBounds};
+
+use sakuhiki_core::{Backend, Datum, Index, Indexer};
 
 pub trait FixedLenKeyExtractor: waaa::Send + waaa::Sync {
     type Datum: Datum;
@@ -35,11 +37,11 @@ impl<K, I> FixedLenBTreeIndex<K, I> {
     }
 }
 
-impl<B, K, I> Index<B> for FixedLenBTreeIndex<K, I>
+impl<B, K, I> Indexer<B> for FixedLenBTreeIndex<K, I>
 where
     B: Backend,
     K: FixedLenKeyExtractor,
-    I: Index<B, Datum = K::Datum>,
+    I: Indexer<B, Datum = K::Datum>,
 {
     type Datum = K::Datum;
 
@@ -100,11 +102,46 @@ where
     // TODO: implement _from_slice variants with the KeyExtractor-specific method
 }
 
+impl<B, K, I> Index<B> for FixedLenBTreeIndex<K, I>
+where
+    B: Backend,
+    K: FixedLenKeyExtractor,
+    I: Index<B, Datum = K::Datum>,
+{
+    type Query<'q> = FixedLenQuery<'q, B, I>;
+}
+
+pub enum FixedLenQuery<'q, B, I>
+where
+    B: Backend,
+    I: Index<B>,
+{
+    Equal(&'q [u8], I::Query<'q>),
+    Prefix(&'q [u8], I::Query<'q>),
+    Range {
+        start: Bound<&'q [u8]>,
+        end: Bound<&'q [u8]>,
+    },
+}
+
+impl<'q, B, I> FixedLenQuery<'q, B, I>
+where
+    B: Backend,
+    I: Index<B>,
+{
+    pub fn range(range: impl RangeBounds<&'q [u8]>) -> Self {
+        Self::Range {
+            start: range.start_bound().cloned(),
+            end: range.end_bound().cloned(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::io;
 
-    use sakuhiki_core::{Datum as _, EndIndex};
+    use sakuhiki_core::{Datum as _, EndIndex, Indexer};
 
     use super::*;
 
@@ -172,7 +209,7 @@ mod tests {
     }
 
     impl<B: Backend> sakuhiki_core::IndexedDatum<B> for Datum {
-        const INDICES: &'static [&'static dyn Index<B, Datum = Self>] =
+        const INDICES: &'static [&'static dyn Indexer<B, Datum = Self>] =
             &[Self::INDEX_FOO, Self::INDEX_BAR];
     }
 

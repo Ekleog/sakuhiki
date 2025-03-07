@@ -3,7 +3,7 @@ use std::ops::RangeBounds;
 use waaa::Stream;
 
 use crate::{
-    Backend, Index, IndexError,
+    Backend, IndexError, Indexer,
     backend::{RoTransaction as _, RwTransaction as _},
 };
 
@@ -19,7 +19,7 @@ where
         Self { backend }
     }
 
-    pub async fn rebuild_index<I: Index<B>>(
+    pub async fn rebuild_index<I: Indexer<B>>(
         &self,
         _index: &I,
     ) -> Result<(), IndexError<B, I::Datum>> {

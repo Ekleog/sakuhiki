@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use crate::{Backend, Datum, Index, backend::RwTransaction as _};
+use crate::{Backend, Datum, Index, Indexer, backend::RwTransaction as _};
 
 pub struct EndIndex<D> {
     cfs: &'static [&'static str; 1],
@@ -16,7 +16,7 @@ impl<D> EndIndex<D> {
     }
 }
 
-impl<B, D> Index<B> for EndIndex<D>
+impl<B, D> Indexer<B> for EndIndex<D>
 where
     B: Backend,
     D: Datum,
@@ -62,4 +62,12 @@ where
     }
 
     // TODO: implement _from_slice variants
+}
+
+impl<B, D> Index<B> for EndIndex<D>
+where
+    B: Backend,
+    D: Datum,
+{
+    type Query<'q> = ();
 }

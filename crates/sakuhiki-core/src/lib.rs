@@ -17,3 +17,6 @@ pub use errors::IndexError;
 
 mod index;
 pub use index::Index;
+
+mod indexer;
+pub use indexer::Indexer;
