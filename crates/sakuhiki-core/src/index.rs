@@ -3,7 +3,7 @@ use crate::{Backend, Datum, IndexError, IndexedDatum};
 pub trait Index<B: Backend>: waaa::Send + waaa::Sync {
     type Datum: IndexedDatum<B>;
 
-    fn cf(&self) -> &'static str;
+    fn cfs(&self) -> &'static [&'static str];
 
     fn index<'fut, 't>(
         &'fut self,

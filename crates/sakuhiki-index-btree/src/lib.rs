@@ -4,16 +4,20 @@ use sakuhiki_core::{Backend, Index, IndexedDatum, backend::RwTransaction};
 
 // TODO: add sub-index, instead of forcing the object key
 pub struct BTreeIndex<D, KeyExtractor> {
-    cf: &'static str,
+    cfs: &'static [&'static str; 1],
     key_extractor: KeyExtractor,
     delimiter: Option<u8>,
     _phantom: PhantomData<fn(D)>,
 }
 
 impl<D, KeyExtractor> BTreeIndex<D, KeyExtractor> {
-    pub const fn new(cf: &'static str, key_extractor: KeyExtractor, delimiter: Option<u8>) -> Self {
+    pub const fn new(
+        cfs: &'static [&'static str; 1],
+        key_extractor: KeyExtractor,
+        delimiter: Option<u8>,
+    ) -> Self {
         Self {
-            cf,
+            cfs,
             key_extractor,
             delimiter,
             _phantom: PhantomData,
@@ -30,8 +34,8 @@ where
 {
     type Datum = D;
 
-    fn cf(&self) -> &'static str {
-        self.cf
+    fn cfs(&self) -> &'static [&'static str] {
+        self.cfs
     }
 
     fn index<'fut, 't>(
@@ -149,8 +153,8 @@ mod tests {
 
     impl<B: Backend> sakuhiki_core::IndexedDatum<B> for Datum {
         const INDICES: &'static [&'static dyn Index<B, Datum = Self>] = &[
-            &BTreeIndex::<Datum, _>::new("datum-foo", |d: &Datum| d.foo.to_be_bytes(), None),
-            &BTreeIndex::<Datum, _>::new("datum-bar", |d: &Datum| d.bar.to_be_bytes(), None),
+            &BTreeIndex::<Datum, _>::new(&["datum-foo"], |d: &Datum| d.foo.to_be_bytes(), None),
+            &BTreeIndex::<Datum, _>::new(&["datum-bar"], |d: &Datum| d.bar.to_be_bytes(), None),
         ];
     }
 
