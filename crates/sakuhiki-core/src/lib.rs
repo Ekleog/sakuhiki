@@ -9,9 +9,6 @@ pub use datum::{Datum, IndexedDatum};
 mod db;
 pub use db::{Db, RoTransaction, RwTransaction};
 
-mod end_index;
-pub use end_index::EndIndex;
-
 mod errors;
 pub use errors::IndexError;
 
