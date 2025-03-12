@@ -29,14 +29,14 @@ where
         object_key: &'fut [u8],
         datum: &'fut Self::Datum,
         transaction: &'fut mut B::RwTransaction<'t>,
-        cf: &'fut mut B::RwTransactionCf<'t>,
+        cfs: &'fut mut [&'t mut B::RwTransactionCf<'t>],
     ) -> waaa::BoxFuture<'fut, Result<(), B::Error>> {
         Box::pin(async move {
             let mut key = Vec::with_capacity(self.key.len_hint(datum) + object_key.len());
             let do_index = self.key.extract_key(datum, &mut key);
             if do_index {
                 key.extend(object_key);
-                transaction.put(cf, &key, &[]).await?;
+                transaction.put(cfs[0], &key, &[]).await?;
             }
             Ok(())
         })
@@ -47,14 +47,14 @@ where
         object_key: &'fut [u8],
         datum: &'fut Self::Datum,
         transaction: &'fut mut B::RwTransaction<'t>,
-        cf: &'fut mut B::RwTransactionCf<'t>,
+        cfs: &'fut mut [&'t mut B::RwTransactionCf<'t>],
     ) -> waaa::BoxFuture<'fut, Result<(), B::Error>> {
         Box::pin(async move {
             let mut key = Vec::with_capacity(self.key.len_hint(datum) + object_key.len());
             let do_index = self.key.extract_key(datum, &mut key);
             if do_index {
                 key.extend(object_key);
-                transaction.put(cf, &key, &[]).await?;
+                transaction.put(cfs[0], &key, &[]).await?;
             }
             Ok(())
         })
