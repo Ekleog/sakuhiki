@@ -86,7 +86,7 @@ where
                 .cf_handle(D::CF)
                 .await
                 .map_err(|error| CfError { cf: D::CF, error })?,
-            indexes_cfs: stream::iter(D::INDICES)
+            indexes_cfs: stream::iter(D::INDEXES)
                 .then(|i| {
                     stream::iter(i.cfs())
                         .then(async |cf| {

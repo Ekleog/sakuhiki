@@ -9,5 +9,5 @@ pub trait Datum: 'static + Send + Sync + Sized {
 }
 
 pub trait IndexedDatum<B: Backend>: 'static + Send + Sync + Datum {
-    const INDICES: &'static [&'static dyn Indexer<B, Datum = Self>];
+    const INDEXES: &'static [&'static dyn Indexer<B, Datum = Self>];
 }
