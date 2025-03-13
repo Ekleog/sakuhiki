@@ -4,7 +4,7 @@ use futures_util::{StreamExt as _, TryStreamExt as _, stream};
 use waaa::Stream;
 
 use crate::{
-    Backend, IndexError, IndexedDatum, Indexer,
+    Backend, CfError, IndexError, IndexedDatum, Indexer,
     backend::{RoTransaction as _, RwTransaction as _},
 };
 
@@ -76,7 +76,7 @@ where
         todo!()
     }
 
-    pub async fn cf_handle<D>(&self) -> Result<Cf<'_, B>, CfHandleError<B::Error>>
+    pub async fn cf_handle<D>(&self) -> Result<Cf<'_, B>, CfError<B::Error>>
     where
         D: IndexedDatum<B>,
     {
@@ -85,7 +85,7 @@ where
                 .backend
                 .cf_handle(D::CF)
                 .await
-                .map_err(|error| CfHandleError { cf: D::CF, error })?,
+                .map_err(|error| CfError { cf: D::CF, error })?,
             indexes_cfs: stream::iter(D::INDICES)
                 .then(|i| {
                     stream::iter(i.cfs())
@@ -93,7 +93,7 @@ where
                             self.backend
                                 .cf_handle(cf)
                                 .await
-                                .map_err(|error| CfHandleError { cf, error })
+                                .map_err(|error| CfError { cf, error })
                         })
                         .try_collect()
                 })
@@ -104,15 +104,6 @@ where
 
     transaction_fn!(ro_transaction, RoTransaction, RoTransactionCf);
     transaction_fn!(rw_transaction, RwTransaction, RwTransactionCf);
-}
-
-#[derive(Debug, thiserror::Error)]
-#[error("getting cf handle for {cf:?}")]
-pub struct CfHandleError<E> {
-    pub cf: &'static str,
-
-    #[source]
-    pub error: E,
 }
 
 pub struct Cf<'db, B>

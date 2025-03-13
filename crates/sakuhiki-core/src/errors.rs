@@ -13,3 +13,12 @@ where
     #[error(transparent)]
     Parsing(D::Error),
 }
+
+#[derive(Debug, thiserror::Error)]
+#[error("operating on cf {cf:?}")]
+pub struct CfError<E> {
+    pub cf: &'static str,
+
+    #[source]
+    pub error: E,
+}
