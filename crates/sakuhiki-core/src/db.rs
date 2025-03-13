@@ -187,7 +187,7 @@ where
         D: IndexedDatum<B>,
     {
         debug_assert!(D::INDEXES.len() == cf.indexes_cfs.len());
-        // TODO: unindex old value
+        // TODO: unindex old value... `put` will need to return old value?
         self.transaction
             .put(cf.datum_cf, key, value)
             .await
@@ -201,11 +201,24 @@ where
         Ok(())
     }
 
-    pub async fn delete<'op>(
+    pub async fn delete<'op, D>(
         &'op mut self,
         cf: &'op mut RwTransactionCf<'t, B>,
         key: &'op [u8],
-    ) -> Result<(), B::Error> {
-        self.transaction.delete(cf.datum_cf, key).await
+    ) -> Result<(), IndexErr<B, D>>
+    where
+        D: IndexedDatum<B>,
+    {
+        debug_assert!(D::INDEXES.len() == cf.indexes_cfs.len());
+        self.transaction
+            .delete(cf.datum_cf, key)
+            .await
+            .map_err(|_error| {
+                todo!() // must first add fn name() to the Cf family
+            })?;
+        for (_i, _cfs) in D::INDEXES.iter().zip(cf.indexes_cfs.iter_mut()) {
+            // TODO: i.unindex_from_slice() with the return of the delete
+        }
+        Ok(())
     }
 }
