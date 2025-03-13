@@ -64,9 +64,9 @@ macro_rules! transaction_fn {
 
         type $transac<'t>: waaa::Send + $transac<'t, Self>;
 
-        fn $fn<'fut, const CFS: usize, F, Ret>(
+        fn $fn<'fut, 'db, F, Ret>(
             &'fut self,
-            cfs: &'fut [&'fut Self::Cf<'fut>; CFS],
+            cfs: &'fut [&'fut Self::Cf<'db>],
             actions: F,
         ) -> waaa::BoxFuture<'fut, Result<Ret, Self::Error>>
         where
@@ -74,7 +74,7 @@ macro_rules! transaction_fn {
                 + waaa::Send
                 + for<'t> FnOnce(
                     &'t mut Self::$transac<'t>,
-                    [Self::$cf<'t>; CFS],
+                    &'t mut [Self::$cf<'t>],
                 ) -> waaa::BoxFuture<'t, Ret>;
     };
 }
@@ -82,7 +82,7 @@ macro_rules! transaction_fn {
 pub trait Backend: 'static {
     type Error;
 
-    type Cf<'db>;
+    type Cf<'db>: waaa::Send + waaa::Sync;
 
     type Key<'op>: AsRef<[u8]>;
 

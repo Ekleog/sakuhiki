@@ -3,8 +3,6 @@ use crate::{Backend, Datum, IndexError};
 pub trait Indexer<B: Backend>: waaa::Send + waaa::Sync {
     type Datum: Datum;
 
-    // TODO(blocked): add NUM_CFS associated constant, and make all cf slices be arrays instead.
-    // Blocked by rust getting support for const generics a bit more expressive, at least.
     fn cfs(&self) -> &'static [&'static str];
 
     fn index<'fut, 't>(

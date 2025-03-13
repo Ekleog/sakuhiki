@@ -45,9 +45,9 @@ macro_rules! transaction_impl {
     ($fn:ident, $iter:ident, $locker:ident, $mapper:expr, $cf:ident, $transac:ident) => {
         type $transac<'t> = Transaction;
 
-        fn $fn<'fut, const CFS: usize, F, Ret>(
+        fn $fn<'fut, 'db, F, Ret>(
             &'fut self,
-            cfs: &'fut [&'fut Self::Cf<'fut>; CFS],
+            cfs: &'fut [&'fut Self::Cf<'db>],
             actions: F,
         ) -> waaa::BoxFuture<'fut, Result<Ret, Self::Error>>
         where
@@ -55,22 +55,21 @@ macro_rules! transaction_impl {
                 + waaa::Send
                 + for<'t> FnOnce(
                     &'t mut Self::$transac<'t>,
-                    [$cf<'t>; CFS],
+                    &'t mut [$cf<'t>],
                 ) -> waaa::BoxFuture<'t, Ret>,
         {
             Box::pin(async {
                 let mut t = Transaction { _private: () };
                 let mut cfs = cfs.iter().enumerate().collect::<Vec<_>>();
                 cfs.sort_by_key(|e| e.1);
-                let mut transaction_cfs = Vec::with_capacity(CFS);
+                let mut transaction_cfs = Vec::with_capacity(cfs.len());
                 for (i, &cf) in cfs {
                     let cf = self.db.get(cf).ok_or(Error::NonExistentColumnFamily)?;
                     transaction_cfs.push((i, cf.$locker().await));
                 }
                 transaction_cfs.sort_by_key(|e| e.0);
-                let transaction_cfs = transaction_cfs.$iter().map($mapper).collect::<Vec<_>>();
-                let transaction_cfs = transaction_cfs.try_into().unwrap();
-                Ok(actions(&mut t, transaction_cfs).await)
+                let mut transaction_cfs = transaction_cfs.$iter().map($mapper).collect::<Vec<_>>();
+                Ok(actions(&mut t, &mut transaction_cfs).await)
             })
         }
     };

@@ -71,7 +71,7 @@ async fn test_index() {
     backend.create_cf("datum-foo");
     backend.create_cf("datum-bar");
     let db = sakuhiki_core::Db::new(backend);
-    let datum = db.cf_handle("datum").await.unwrap();
+    let datum = db.cf_handle::<Datum>().await.unwrap();
     // TODO: will need this
     // let index_foo = db.cf_handle("datum-foo").await.unwrap();
     // let index_bar = db.cf_handle("datum-bar").await.unwrap();
