@@ -6,7 +6,6 @@ use waaa::Stream;
 use crate::{
     Backend, CfError, IndexError, IndexedDatum, Indexer,
     backend::{RoTransaction as _, RwTransaction as _},
-    errors::IndexErr,
 };
 
 pub struct Db<B> {
@@ -182,7 +181,7 @@ where
         cf: &'op mut RwTransactionCf<'t, B>,
         key: &'op [u8],
         value: &'op [u8],
-    ) -> Result<(), IndexErr<B, D>>
+    ) -> Result<(), IndexError<B::Error, D::Error>>
     where
         D: IndexedDatum<B>,
     {
@@ -205,7 +204,7 @@ where
         &'op mut self,
         cf: &'op mut RwTransactionCf<'t, B>,
         key: &'op [u8],
-    ) -> Result<(), IndexErr<B, D>>
+    ) -> Result<(), IndexError<B::Error, D::Error>>
     where
         D: IndexedDatum<B>,
     {

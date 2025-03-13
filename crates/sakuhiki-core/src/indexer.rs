@@ -1,4 +1,4 @@
-use crate::{Backend, Datum, IndexError, errors::IndexErr};
+use crate::{Backend, Datum, IndexError};
 
 pub trait Indexer<B: Backend>: waaa::Send + waaa::Sync {
     type Datum: Datum;
@@ -27,7 +27,8 @@ pub trait Indexer<B: Backend>: waaa::Send + waaa::Sync {
         slice: &'fut [u8],
         transaction: &'fut mut B::RwTransaction<'t>,
         cfs: &'fut mut [B::RwTransactionCf<'t>],
-    ) -> waaa::BoxFuture<'fut, Result<(), IndexErr<B, Self::Datum>>> {
+    ) -> waaa::BoxFuture<'fut, Result<(), IndexError<B::Error, <Self::Datum as Datum>::Error>>>
+    {
         Box::pin(async move {
             let datum = Self::Datum::from_slice(slice).map_err(IndexError::Parsing)?;
             self.index(object_key, &datum, transaction, cfs)
@@ -42,7 +43,8 @@ pub trait Indexer<B: Backend>: waaa::Send + waaa::Sync {
         slice: &'fut [u8],
         transaction: &'fut mut B::RwTransaction<'t>,
         cfs: &'fut mut [B::RwTransactionCf<'t>],
-    ) -> waaa::BoxFuture<'fut, Result<(), IndexErr<B, Self::Datum>>> {
+    ) -> waaa::BoxFuture<'fut, Result<(), IndexError<B::Error, <Self::Datum as Datum>::Error>>>
+    {
         Box::pin(async move {
             let datum = Self::Datum::from_slice(slice).map_err(IndexError::Parsing)?;
             self.unindex(object_key, &datum, transaction, cfs)
