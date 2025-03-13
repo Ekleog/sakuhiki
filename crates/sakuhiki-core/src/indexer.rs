@@ -21,6 +21,7 @@ pub trait Indexer<B: Backend>: waaa::Send + waaa::Sync {
         cfs: &'fut mut [B::RwTransactionCf<'t>],
     ) -> waaa::BoxFuture<'fut, Result<(), B::Error>>;
 
+    #[allow(clippy::type_complexity)] // No good way to cut this smaller
     fn index_from_slice<'fut, 't>(
         &'fut self,
         object_key: &'fut [u8],
@@ -37,6 +38,7 @@ pub trait Indexer<B: Backend>: waaa::Send + waaa::Sync {
         })
     }
 
+    #[allow(clippy::type_complexity)] // No good way to cut this smaller
     fn unindex_from_slice<'fut, 't>(
         &'fut self,
         object_key: &'fut [u8],
