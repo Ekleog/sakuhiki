@@ -79,8 +79,12 @@ async fn test_index() {
         Box::pin(async move {
             let d12 = Datum::new(1, 2);
             let d21 = Datum::new(2, 1);
-            t.put(&mut datum, b"12", &d12.to_array()).await.unwrap();
-            t.put(&mut datum, b"21", &d21.to_array()).await.unwrap();
+            t.put::<Datum>(&mut datum, b"12", &d12.to_array())
+                .await
+                .unwrap();
+            t.put::<Datum>(&mut datum, b"21", &d21.to_array())
+                .await
+                .unwrap();
             assert_eq!(
                 Datum::from_slice(t.get(&mut datum, b"12").await.unwrap().unwrap()).unwrap(),
                 d12

@@ -6,6 +6,7 @@ use waaa::Stream;
 use crate::{
     Backend, CfError, IndexError, IndexedDatum, Indexer,
     backend::{RoTransaction as _, RwTransaction as _},
+    errors::IndexErr,
 };
 
 pub struct Db<B> {
@@ -128,6 +129,7 @@ macro_rules! transaction_structs {
             B: Backend,
         {
             datum_cf: &'t mut B::$cf<'t>,
+            #[allow(dead_code)] // TODO: will become used for Ro too once queries are implemented
             indexes_cfs: Vec<&'t mut [B::$cf<'t>]>,
         }
     };
@@ -174,13 +176,29 @@ where
 {
     ro_transaction_methods!(RwTransactionCf);
 
-    pub async fn put<'op>(
+    // TODO: rename into put_slice, add put
+    pub async fn put<'op, D>(
         &'op mut self,
         cf: &'op mut RwTransactionCf<'t, B>,
         key: &'op [u8],
         value: &'op [u8],
-    ) -> Result<(), B::Error> {
-        self.transaction.put(cf.datum_cf, key, value).await
+    ) -> Result<(), IndexErr<B, D>>
+    where
+        D: IndexedDatum<B>,
+    {
+        debug_assert!(D::INDEXES.len() == cf.indexes_cfs.len());
+        // TODO: unindex old value
+        self.transaction
+            .put(cf.datum_cf, key, value)
+            .await
+            .map_err(|_error| {
+                todo!() // must first add fn name() to the Cf family
+            })?;
+        for (i, cfs) in D::INDEXES.iter().zip(cf.indexes_cfs.iter_mut()) {
+            i.index_from_slice(key, value, self.transaction, cfs)
+                .await?;
+        }
+        Ok(())
     }
 
     pub async fn delete<'op>(

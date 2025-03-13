@@ -1,17 +1,15 @@
 use crate::{Backend, Datum};
 
+pub(crate) type IndexErr<B, D> = IndexError<<B as Backend>::Error, <D as Datum>::Error>;
+
 #[derive(Debug, thiserror::Error)]
-pub enum IndexError<B, D>
-where
-    B: Backend,
-    D: Datum,
-{
-    // TODO: improve on this
+pub enum IndexError<B, D> {
+    // TODO: this should take CfError<B> instead of B
     #[error(transparent)]
-    Backend(B::Error),
+    Backend(B),
 
     #[error(transparent)]
-    Parsing(D::Error),
+    Parsing(D),
 }
 
 #[derive(Debug, thiserror::Error)]
