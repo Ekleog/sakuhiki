@@ -4,7 +4,7 @@ pub(crate) type IndexErr<B, D> = IndexError<<B as Backend>::Error, <D as Datum>:
 
 #[derive(Debug, thiserror::Error)]
 pub enum IndexError<B, D> {
-    // TODO: this should take CfError<B> instead of B
+    // TODO(high): this should take CfError<B> instead of B
     #[error(transparent)]
     Backend(B),
 

@@ -64,7 +64,7 @@ impl<B: Backend> sakuhiki_core::IndexedDatum<B> for Datum {
 
 #[tokio::test]
 async fn test_index() {
-    // TODO: Should have a better migration story for adding/removing indexes
+    // TODO(med): Should have a better migration story for adding/removing indexes
     // Maybe just have create_cf be added to backend and auto-rebuilding?
     let mut backend = sakuhiki_memdb::MemDb::new();
     backend.create_cf("datum");
@@ -72,9 +72,6 @@ async fn test_index() {
     backend.create_cf("datum-bar");
     let db = sakuhiki_core::Db::new(backend);
     let datum = db.cf_handle::<Datum>().await.unwrap();
-    // TODO: will need this
-    // let index_foo = db.cf_handle("datum-foo").await.unwrap();
-    // let index_bar = db.cf_handle("datum-bar").await.unwrap();
     db.rw_transaction(&[&datum], |mut t, [mut datum]| {
         Box::pin(async move {
             let d12 = Datum::new(1, 2);
@@ -97,5 +94,5 @@ async fn test_index() {
     })
     .await
     .unwrap();
-    // TODO
+    // TODO(med): test more and better
 }

@@ -17,7 +17,6 @@ type ColumnFamily = BTreeMap<Vec<u8>, Vec<u8>>;
 type RoCf<'t> = &'t ColumnFamily;
 type RwCf<'t> = &'t mut ColumnFamily;
 
-// TODO: look into using something like concread's BptreeMap? But is it actually able to check for transaction conflict?
 pub struct MemDb {
     db: BTreeMap<String, RwLock<ColumnFamily>>,
 }

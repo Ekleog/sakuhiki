@@ -1,4 +1,4 @@
-#![allow(dead_code)] // TODO: should be used once Query is actually implemented
+#![allow(dead_code)] // TODO(high): should be used once Query is actually implemented
 
 use std::{
     marker::PhantomData,

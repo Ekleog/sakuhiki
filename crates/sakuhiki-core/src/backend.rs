@@ -13,7 +13,7 @@ macro_rules! ro_transaction_fns {
             $t: 'op,
             'op: 'key;
 
-        // TODO: do we need get_many / multi_get?
+        // TODO(low): do we need get_many / multi_get?
         fn scan<'op, 'keys>(
             &'op mut self,
             cf: &'op mut B::$cf<$t>,

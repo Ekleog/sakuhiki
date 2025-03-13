@@ -74,7 +74,7 @@ where
         _index: &I,
     ) -> Result<(), IndexError<B, I::Datum>> {
         // Note: NEED TO BLOCK PUTS WHILE THE TRANSACTION IS IN PROGRESS
-        todo!()
+        todo!() // TODO(med): implement index rebuilding
     }
 
     pub async fn cf_handle<D>(&self) -> Result<Cf<'_, B>, CfError<B::Error>>
@@ -129,7 +129,7 @@ macro_rules! transaction_structs {
             B: Backend,
         {
             datum_cf: &'t mut B::$cf<'t>,
-            #[allow(dead_code)] // TODO: will become used for Ro too once queries are implemented
+            #[allow(dead_code)] // TODO(high): will become used for Ro once queries are done
             indexes_cfs: Vec<&'t mut [B::$cf<'t>]>,
         }
     };
@@ -176,7 +176,7 @@ where
 {
     ro_transaction_methods!(RwTransactionCf);
 
-    // TODO: rename into put_slice, add put
+    // TODO(med): rename into put_slice, add put
     pub async fn put<'op, D>(
         &'op mut self,
         cf: &'op mut RwTransactionCf<'t, B>,
@@ -187,12 +187,12 @@ where
         D: IndexedDatum<B>,
     {
         debug_assert!(D::INDEXES.len() == cf.indexes_cfs.len());
-        // TODO: unindex old value... `put` will need to return old value?
+        // TODO(high): unindex old value... `put` will need to return old value?
         self.transaction
             .put(cf.datum_cf, key, value)
             .await
             .map_err(|_error| {
-                todo!() // must first add fn name() to the Cf family
+                todo!() // TODO(med): must first add fn name() to the Cf family
             })?;
         for (i, cfs) in D::INDEXES.iter().zip(cf.indexes_cfs.iter_mut()) {
             i.index_from_slice(key, value, self.transaction, cfs)
@@ -214,10 +214,10 @@ where
             .delete(cf.datum_cf, key)
             .await
             .map_err(|_error| {
-                todo!() // must first add fn name() to the Cf family
+                todo!() // TODO(med): must first add fn name() to the Cf family
             })?;
         for (_i, _cfs) in D::INDEXES.iter().zip(cf.indexes_cfs.iter_mut()) {
-            // TODO: i.unindex_from_slice() with the return of the delete
+            // TODO(high): i.unindex_from_slice() with the return of the delete
         }
         Ok(())
     }

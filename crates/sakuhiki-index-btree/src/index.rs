@@ -60,7 +60,7 @@ where
         })
     }
 
-    // TODO: implement _from_slice variants with the KeyExtractor-specific method
+    // TODO(med): implement _from_slice variants with the KeyExtractor-specific method
 }
 
 impl<B, K> Index<B> for BTreeIndex<K>
