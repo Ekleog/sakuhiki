@@ -6,7 +6,7 @@ use waaa::Stream;
 
 use crate::{
     Backend, CfError, IndexError, IndexedDatum, Indexer,
-    backend::{RoTransaction as _, RwTransaction as _},
+    backend::{BackendCf as _, RoTransaction as _, RwTransaction as _},
 };
 
 pub struct Db<B> {
@@ -189,9 +189,7 @@ where
             .transaction
             .put(&cf.datum_cf, key, value)
             .await
-            .map_err(|_error| {
-                todo!() // TODO(med): must first add fn name() to the Cf family
-            })?;
+            .map_err(|e| IndexError::backend(cf.datum_cf.name(), e))?;
         for (i, cfs) in D::INDEXES.iter().zip(cf.indexes_cfs.iter()) {
             if let Some(old) = &old {
                 i.unindex_from_slice(key, old.as_ref(), &self.transaction, cfs)
@@ -216,9 +214,7 @@ where
             .transaction
             .delete(&cf.datum_cf, key)
             .await
-            .map_err(|_error| {
-                todo!() // TODO(med): must first add fn name() to the Cf family
-            })?;
+            .map_err(|e| IndexError::backend(cf.datum_cf.name(), e))?;
         if let Some(old) = &old {
             for (i, cfs) in D::INDEXES.iter().zip(cf.indexes_cfs.iter()) {
                 i.unindex_from_slice(key, old.as_ref(), &self.transaction, cfs)
