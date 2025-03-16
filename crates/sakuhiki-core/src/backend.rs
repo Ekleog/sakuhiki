@@ -5,8 +5,8 @@ use waaa::Future;
 macro_rules! ro_transaction_fns {
     ($t:lifetime, $cf:ident) => {
         fn get<'op, 'key>(
-            &'op mut self,
-            cf: &'op mut B::$cf<$t>,
+            &'op self,
+            cf: &'op B::$cf<$t>,
             key: &'key [u8],
         ) -> waaa::BoxFuture<'key, Result<Option<B::Value<'op>>, B::Error>>
         where
@@ -15,8 +15,8 @@ macro_rules! ro_transaction_fns {
 
         // TODO(low): do we need get_many / multi_get?
         fn scan<'op, 'keys>(
-            &'op mut self,
-            cf: &'op mut B::$cf<$t>,
+            &'op self,
+            cf: &'op B::$cf<$t>,
             keys: impl 'keys + RangeBounds<[u8]>,
         ) -> waaa::BoxStream<'keys, Result<(B::Key<'op>, B::Value<'op>), B::Error>>
         where
@@ -41,8 +41,8 @@ where
     ro_transaction_fns!('t, RwTransactionCf);
 
     fn put<'op, 'kv>(
-        &'op mut self,
-        cf: &'op mut B::RwTransactionCf<'t>,
+        &'op self,
+        cf: &'op B::RwTransactionCf<'t>,
         key: &'kv [u8],
         value: &'kv [u8],
     ) -> waaa::BoxFuture<'kv, Result<Option<B::Value<'op>>, B::Error>>
@@ -51,8 +51,8 @@ where
         'op: 'kv;
 
     fn delete<'op, 'key>(
-        &'op mut self,
-        cf: &'op mut B::RwTransactionCf<'t>,
+        &'op self,
+        cf: &'op B::RwTransactionCf<'t>,
         key: &'key [u8],
     ) -> waaa::BoxFuture<'key, Result<Option<B::Value<'op>>, B::Error>>
     where
@@ -62,9 +62,9 @@ where
 
 macro_rules! transaction_fn {
     ($fn:ident, $cf:ident, $transac:ident) => {
-        type $cf<'t>: waaa::Send;
+        type $cf<'t>: waaa::Send + waaa::Sync;
 
-        type $transac<'t>: waaa::Send + $transac<'t, Self>;
+        type $transac<'t>: waaa::Send + waaa::Sync + $transac<'t, Self>;
 
         fn $fn<'fut, 'db, F, Ret>(
             &'fut self,
@@ -75,8 +75,9 @@ macro_rules! transaction_fn {
             F: 'fut
                 + waaa::Send
                 + for<'t> FnOnce(
-                    &'t mut Self::$transac<'t>,
-                    &'t mut [Self::$cf<'t>],
+                    &'t (),
+                    Self::$transac<'t>,
+                    Vec<Self::$cf<'t>>,
                 ) -> waaa::BoxFuture<'t, Ret>;
     };
 }

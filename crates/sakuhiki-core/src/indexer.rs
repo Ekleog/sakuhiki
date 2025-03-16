@@ -9,16 +9,16 @@ pub trait Indexer<B: Backend>: waaa::Send + waaa::Sync {
         &'fut self,
         object_key: &'fut [u8],
         datum: &'fut Self::Datum,
-        transaction: &'fut mut B::RwTransaction<'t>,
-        cfs: &'fut mut [B::RwTransactionCf<'t>],
+        transaction: &'fut B::RwTransaction<'t>,
+        cfs: &'fut [B::RwTransactionCf<'t>],
     ) -> waaa::BoxFuture<'fut, Result<(), B::Error>>;
 
     fn unindex<'fut, 't>(
         &'fut self,
         object_key: &'fut [u8],
         datum: &'fut Self::Datum,
-        transaction: &'fut mut B::RwTransaction<'t>,
-        cfs: &'fut mut [B::RwTransactionCf<'t>],
+        transaction: &'fut B::RwTransaction<'t>,
+        cfs: &'fut [B::RwTransactionCf<'t>],
     ) -> waaa::BoxFuture<'fut, Result<(), B::Error>>;
 
     #[allow(clippy::type_complexity)] // No good way to cut this smaller
@@ -26,8 +26,8 @@ pub trait Indexer<B: Backend>: waaa::Send + waaa::Sync {
         &'fut self,
         object_key: &'fut [u8],
         slice: &'fut [u8],
-        transaction: &'fut mut B::RwTransaction<'t>,
-        cfs: &'fut mut [B::RwTransactionCf<'t>],
+        transaction: &'fut B::RwTransaction<'t>,
+        cfs: &'fut [B::RwTransactionCf<'t>],
     ) -> waaa::BoxFuture<'fut, Result<(), IndexError<B::Error, <Self::Datum as Datum>::Error>>>
     {
         Box::pin(async move {
@@ -43,8 +43,8 @@ pub trait Indexer<B: Backend>: waaa::Send + waaa::Sync {
         &'fut self,
         object_key: &'fut [u8],
         slice: &'fut [u8],
-        transaction: &'fut mut B::RwTransaction<'t>,
-        cfs: &'fut mut [B::RwTransactionCf<'t>],
+        transaction: &'fut B::RwTransaction<'t>,
+        cfs: &'fut [B::RwTransactionCf<'t>],
     ) -> waaa::BoxFuture<'fut, Result<(), IndexError<B::Error, <Self::Datum as Datum>::Error>>>
     {
         Box::pin(async move {

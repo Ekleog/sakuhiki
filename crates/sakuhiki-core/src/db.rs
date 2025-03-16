@@ -1,5 +1,5 @@
-use std::{iter, ops::RangeBounds};
-// TODO(high): use AsyncFn everywhere possible
+use std::{collections::VecDeque, iter, ops::RangeBounds};
+// TODO(blocked): use AsyncFn everywhere possible, once its return future can be marked Send/Sync
 
 use futures_util::{StreamExt as _, TryStreamExt as _, stream};
 use waaa::Stream;
@@ -33,28 +33,26 @@ macro_rules! transaction_fn {
                 .collect::<Vec<_>>();
             let num_backend_cfs = backend_cfs.len();
             self.backend
-                .$fn(&backend_cfs, move |transaction, mut backend_cfs| {
+                .$fn(&backend_cfs, move |_, transaction, backend_cfs| {
                     debug_assert!(num_backend_cfs == backend_cfs.len());
-                    let mut inner_cfs = Vec::with_capacity(CFS);
+                    let mut backend_cfs = VecDeque::from(backend_cfs);
+                    let mut frontend_cfs = Vec::with_capacity(CFS);
                     for d in 0..CFS {
-                        let datum_cf;
-                        (datum_cf, backend_cfs) = backend_cfs.split_first_mut().unwrap();
+                        let datum_cf = backend_cfs.pop_front().unwrap();
                         let mut indexes_cfs = Vec::with_capacity(cfs[d].indexes_cfs.len());
                         for i in cfs[d].indexes_cfs.iter() {
-                            let backend_indexes_cfs;
-                            (backend_indexes_cfs, backend_cfs) = backend_cfs.split_at_mut(i.len());
-                            indexes_cfs.push(backend_indexes_cfs);
+                            indexes_cfs.push(backend_cfs.drain(0..i.len()).collect());
                         }
-                        inner_cfs.push($cf {
+                        frontend_cfs.push($cf {
                             datum_cf,
                             indexes_cfs,
                         });
                     }
                     debug_assert!(backend_cfs.is_empty());
-                    let Ok(inner_cfs) = inner_cfs.try_into() else {
+                    let Ok(frontend_cfs) = frontend_cfs.try_into() else {
                         panic!("unexpected number of cfs");
                     };
-                    actions($transac { transaction }, inner_cfs)
+                    actions($transac { transaction }, frontend_cfs)
                 })
                 .await
         }
@@ -121,16 +119,16 @@ macro_rules! transaction_structs {
         where
             B: 't + Backend,
         {
-            transaction: &'t mut B::$transac<'t>,
+            transaction: B::$transac<'t>,
         }
 
         pub struct $cf<'t, B>
         where
             B: Backend,
         {
-            datum_cf: &'t mut B::$cf<'t>,
+            datum_cf: B::$cf<'t>,
             #[allow(dead_code)] // TODO(high): will become used for Ro once queries are done
-            indexes_cfs: Vec<&'t mut [B::$cf<'t>]>,
+            indexes_cfs: Vec<Vec<B::$cf<'t>>>,
         }
     };
 }
@@ -141,16 +139,16 @@ transaction_structs!(RwTransaction, RwTransactionCf);
 macro_rules! ro_transaction_methods {
     ($cf:ident) => {
         pub async fn get<'op, 'key>(
-            &'op mut self,
-            cf: &'op mut $cf<'t, B>,
+            &'op self,
+            cf: &'op $cf<'t, B>,
             key: &'key [u8],
         ) -> Result<Option<B::Value<'op>>, B::Error> {
-            self.transaction.get(cf.datum_cf, key).await
+            self.transaction.get(&cf.datum_cf, key).await
         }
 
         pub fn scan<'op, 'keys, Keys>(
-            &'op mut self,
-            cf: &'op mut $cf<'t, B>,
+            &'op self,
+            cf: &'op $cf<'t, B>,
             keys: Keys,
         ) -> impl Stream<Item = Result<(B::Key<'op>, B::Value<'op>), B::Error>>
         + use<'t, 'op, 'keys, B, Keys>
@@ -158,7 +156,7 @@ macro_rules! ro_transaction_methods {
             Keys: 'keys + RangeBounds<[u8]>,
             'op: 'keys,
         {
-            self.transaction.scan(cf.datum_cf, keys)
+            self.transaction.scan(&cf.datum_cf, keys)
         }
     };
 }
@@ -178,8 +176,8 @@ where
 
     // TODO(med): rename into put_slice, add put
     pub async fn put<'op, D>(
-        &'op mut self,
-        cf: &'op mut RwTransactionCf<'t, B>,
+        &'op self,
+        cf: &'op RwTransactionCf<'t, B>,
         key: &'op [u8],
         value: &'op [u8],
     ) -> Result<(), IndexError<B::Error, D::Error>>
@@ -189,21 +187,21 @@ where
         debug_assert!(D::INDEXES.len() == cf.indexes_cfs.len());
         // TODO(high): unindex old value... `put` will need to return old value?
         self.transaction
-            .put(cf.datum_cf, key, value)
+            .put(&cf.datum_cf, key, value)
             .await
             .map_err(|_error| {
                 todo!() // TODO(med): must first add fn name() to the Cf family
             })?;
-        for (i, cfs) in D::INDEXES.iter().zip(cf.indexes_cfs.iter_mut()) {
-            i.index_from_slice(key, value, self.transaction, cfs)
+        for (i, cfs) in D::INDEXES.iter().zip(cf.indexes_cfs.iter()) {
+            i.index_from_slice(key, value, &self.transaction, cfs)
                 .await?;
         }
         Ok(())
     }
 
     pub async fn delete<'op, D>(
-        &'op mut self,
-        cf: &'op mut RwTransactionCf<'t, B>,
+        &'op self,
+        cf: &'op RwTransactionCf<'t, B>,
         key: &'op [u8],
     ) -> Result<(), IndexError<B::Error, D::Error>>
     where
@@ -211,12 +209,12 @@ where
     {
         debug_assert!(D::INDEXES.len() == cf.indexes_cfs.len());
         self.transaction
-            .delete(cf.datum_cf, key)
+            .delete(&cf.datum_cf, key)
             .await
             .map_err(|_error| {
                 todo!() // TODO(med): must first add fn name() to the Cf family
             })?;
-        for (_i, _cfs) in D::INDEXES.iter().zip(cf.indexes_cfs.iter_mut()) {
+        for (_i, _cfs) in D::INDEXES.iter().zip(cf.indexes_cfs.iter()) {
             // TODO(high): i.unindex_from_slice() with the return of the delete
         }
         Ok(())
