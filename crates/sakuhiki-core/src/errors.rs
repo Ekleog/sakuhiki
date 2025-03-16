@@ -15,17 +15,16 @@ impl<E> CfError<E> {
 
 #[derive(Debug, thiserror::Error)]
 pub enum IndexError<B, D> {
-    // TODO(med): this should take CfError<B> instead of B once we store the name inside the *Cf structs
     #[error(transparent)]
-    Backend(B),
+    Backend(CfError<B>),
 
     #[error(transparent)]
     Parsing(D),
 }
 
 impl<B, D> IndexError<B, D> {
-    pub fn backend(error: B) -> Self {
-        Self::Backend(error)
+    pub fn backend(cf: &'static str, error: B) -> Self {
+        Self::Backend(CfError { cf, error })
     }
 
     pub fn parsing(error: D) -> Self {

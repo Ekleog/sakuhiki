@@ -34,7 +34,7 @@ pub trait Indexer<B: Backend>: waaa::Send + waaa::Sync {
             let datum = Self::Datum::from_slice(slice).map_err(IndexError::Parsing)?;
             self.index(object_key, &datum, transaction, cfs)
                 .await
-                .map_err(IndexError::Backend)
+                .map_err(|e| IndexError::backend("", e)) // TODO(med): use proper cf name here
         })
     }
 
@@ -51,7 +51,7 @@ pub trait Indexer<B: Backend>: waaa::Send + waaa::Sync {
             let datum = Self::Datum::from_slice(slice).map_err(IndexError::Parsing)?;
             self.unindex(object_key, &datum, transaction, cfs)
                 .await
-                .map_err(IndexError::Backend)
+                .map_err(|e| IndexError::backend("", e)) // TODO(med): use proper cf name here
         })
     }
 }
