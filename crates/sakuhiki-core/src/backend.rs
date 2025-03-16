@@ -40,22 +40,24 @@ where
 {
     ro_transaction_fns!('t, RwTransactionCf);
 
-    fn put<'op>(
+    fn put<'op, 'kv>(
         &'op mut self,
         cf: &'op mut B::RwTransactionCf<'t>,
-        key: &'op [u8],
-        value: &'op [u8],
-    ) -> waaa::BoxFuture<'op, Result<(), B::Error>>
+        key: &'kv [u8],
+        value: &'kv [u8],
+    ) -> waaa::BoxFuture<'kv, Result<Option<B::Value<'op>>, B::Error>>
     where
-        't: 'op;
+        't: 'op,
+        'op: 'kv;
 
-    fn delete<'op>(
+    fn delete<'op, 'key>(
         &'op mut self,
         cf: &'op mut B::RwTransactionCf<'t>,
-        key: &'op [u8],
-    ) -> waaa::BoxFuture<'op, Result<(), B::Error>>
+        key: &'key [u8],
+    ) -> waaa::BoxFuture<'key, Result<Option<B::Value<'op>>, B::Error>>
     where
-        't: 'op;
+        't: 'op,
+        'op: 'key;
 }
 
 macro_rules! transaction_fn {

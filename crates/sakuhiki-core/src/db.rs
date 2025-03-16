@@ -1,4 +1,5 @@
 use std::{iter, ops::RangeBounds};
+// TODO(high): use AsyncFn everywhere possible
 
 use futures_util::{StreamExt as _, TryStreamExt as _, stream};
 use waaa::Stream;

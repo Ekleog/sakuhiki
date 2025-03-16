@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     collections::BTreeMap,
     future::{Ready, ready},
     ops::RangeBounds,
@@ -79,7 +80,8 @@ impl sakuhiki_core::Backend for MemDb {
 
     type Key<'op> = &'op [u8];
 
-    type Value<'op> = &'op [u8];
+    // TODO(med): once rocksdb & indexed-db implemented, check it makes sense for put/delete to return Value
+    type Value<'op> = Cow<'op, [u8]>;
 
     type Cf<'db> = String;
     type RoTransactionCf<'t> = RoCf<'t>;
@@ -120,25 +122,25 @@ macro_rules! ro_transaction_methods {
             &'op mut self,
             cf: &'op mut $cf<'t>,
             key: &'key [u8],
-        ) -> waaa::BoxFuture<'key, Result<Option<&'op [u8]>, Error>>
+        ) -> waaa::BoxFuture<'key, Result<Option<Cow<'op, [u8]>>, Error>>
         where
             'op: 'key,
         {
-            Box::pin(ready(Ok(cf.get(key).map(|v| v.as_slice()))))
+            Box::pin(ready(Ok(cf.get(key).map(|v| Cow::Borrowed(v.as_slice())))))
         }
 
         fn scan<'op, 'keys>(
             &'op mut self,
             cf: &'op mut $cf<'t>,
             keys: impl 'keys + RangeBounds<[u8]>,
-        ) -> waaa::BoxStream<'keys, Result<(&'op [u8], &'op [u8]), Error>>
+        ) -> waaa::BoxStream<'keys, Result<(&'op [u8], Cow<'op, [u8]>), Error>>
         where
             't: 'op,
             'op: 'keys,
         {
             Box::pin(stream::iter(
                 cf.range(keys)
-                    .map(|(k, v)| Ok((k.as_slice(), v.as_slice()))),
+                    .map(|(k, v)| Ok((k.as_slice(), Cow::Borrowed(v.as_slice())))),
             ))
         }
     };
@@ -151,28 +153,30 @@ impl<'t> sakuhiki_core::backend::RoTransaction<'t, MemDb> for Transaction {
 impl<'t> sakuhiki_core::backend::RwTransaction<'t, MemDb> for Transaction {
     ro_transaction_methods!(RwCf);
 
-    fn put<'op>(
+    fn put<'op, 'kv>(
         &'op mut self,
         cf: &'op mut RwCf<'t>,
-        key: &'op [u8],
-        value: &'op [u8],
-    ) -> waaa::BoxFuture<'op, Result<(), Error>>
+        key: &'kv [u8],
+        value: &'kv [u8],
+    ) -> waaa::BoxFuture<'kv, Result<Option<Cow<'op, [u8]>>, Error>>
     where
         't: 'op,
+        'op: 'kv,
     {
-        cf.insert(key.to_vec(), value.to_vec());
-        Box::pin(ready(Ok(())))
+        let data = cf.insert(key.to_vec(), value.to_vec());
+        Box::pin(ready(Ok(data.map(Cow::Owned))))
     }
 
-    fn delete<'op>(
+    fn delete<'op, 'key>(
         &'op mut self,
         cf: &'op mut RwCf<'t>,
-        key: &'op [u8],
-    ) -> waaa::BoxFuture<'op, Result<(), Error>>
+        key: &'key [u8],
+    ) -> waaa::BoxFuture<'key, Result<Option<Cow<'op, [u8]>>, Error>>
     where
         't: 'op,
+        'op: 'key,
     {
-        cf.remove(key);
-        Box::pin(ready(Ok(())))
+        let data = cf.remove(key);
+        Box::pin(ready(Ok(data.map(Cow::Owned))))
     }
 }

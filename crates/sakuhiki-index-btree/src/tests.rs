@@ -83,11 +83,11 @@ async fn test_index() {
                 .await
                 .unwrap();
             assert_eq!(
-                Datum::from_slice(t.get(&mut datum, b"12").await.unwrap().unwrap()).unwrap(),
+                Datum::from_slice(&t.get(&mut datum, b"12").await.unwrap().unwrap()).unwrap(),
                 d12
             );
             assert_eq!(
-                Datum::from_slice(t.get(&mut datum, b"21").await.unwrap().unwrap()).unwrap(),
+                Datum::from_slice(&t.get(&mut datum, b"21").await.unwrap().unwrap()).unwrap(),
                 d21
             );
         })
