@@ -7,6 +7,7 @@ use std::{
 
 use async_lock::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use futures_util::stream;
+use sakuhiki_core::backend::BackendCf;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -15,8 +16,29 @@ pub enum Error {
 }
 
 type ColumnFamily = BTreeMap<Vec<u8>, Vec<u8>>;
-type RoCf<'t> = RwLockReadGuard<'t, ColumnFamily>;
-type RwCf<'t> = Mutex<RwLockWriteGuard<'t, ColumnFamily>>;
+
+pub struct RoCf<'t> {
+    cf: RwLockReadGuard<'t, ColumnFamily>,
+    name: &'static str,
+}
+
+pub struct RwCf<'t> {
+    cf: Mutex<RwLockWriteGuard<'t, ColumnFamily>>,
+    name: &'static str,
+}
+
+macro_rules! cf_impl {
+    ($struct:ident) => {
+        impl<'t> BackendCf for $struct<'t> {
+            fn name(&self) -> &'static str {
+                self.name
+            }
+        }
+    };
+}
+
+cf_impl!(RoCf);
+cf_impl!(RwCf);
 
 pub struct MemDb {
     db: BTreeMap<String, RwLock<ColumnFamily>>,
@@ -60,9 +82,10 @@ macro_rules! transaction_impl {
                 let mut cfs = cfs.iter().enumerate().collect::<Vec<_>>();
                 cfs.sort_by_key(|e| e.1);
                 let mut transaction_cfs = Vec::with_capacity(cfs.len());
-                for (i, &cf) in cfs {
-                    let cf = self.db.get(cf).ok_or(Error::NonExistentColumnFamily)?;
-                    transaction_cfs.push((i, $mapper(cf.$locker().await)));
+                for (i, &name) in cfs {
+                    let cf = self.db.get(*name).ok_or(Error::NonExistentColumnFamily)?;
+                    let cf = $mapper(cf.$locker().await);
+                    transaction_cfs.push((i, $cf { name, cf }));
                 }
                 transaction_cfs.sort_by_key(|e| e.0);
                 let transaction_cfs = transaction_cfs.into_iter().map(|(_, cf)| cf).collect::<Vec<_>>();
@@ -78,14 +101,14 @@ impl sakuhiki_core::Backend for MemDb {
     type Key<'op> = Vec<u8>;
     type Value<'op> = Vec<u8>;
 
-    type Cf<'db> = String;
+    type Cf<'db> = &'static str;
     type RoTransactionCf<'t> = RoCf<'t>;
     type RwTransactionCf<'t> = RwCf<'t>;
 
     type CfHandleFuture<'op> = Ready<Result<Self::Cf<'op>, Self::Error>>;
 
-    fn cf_handle<'db>(&'db self, name: &str) -> Self::CfHandleFuture<'db> {
-        ready(Ok(name.to_string()))
+    fn cf_handle<'db>(&'db self, name: &'static str) -> Self::CfHandleFuture<'db> {
+        ready(Ok(name))
     }
 
     transaction_impl!(ro_transaction, read, |cf| cf, RoCf, RoTransaction);
@@ -129,11 +152,11 @@ macro_rules! ro_transaction_methods {
 }
 
 impl<'t> sakuhiki_core::backend::RoTransaction<'t, MemDb> for Transaction {
-    ro_transaction_methods!(RoCf, |cf| cf);
+    ro_transaction_methods!(RoCf, |cf| cf.cf);
 }
 
 impl<'t> sakuhiki_core::backend::RwTransaction<'t, MemDb> for Transaction {
-    ro_transaction_methods!(RwCf, |cf| cf.lock().unwrap());
+    ro_transaction_methods!(RwCf, |cf| cf.cf.lock().unwrap());
 
     fn put<'op, 'kv>(
         &'op self,
@@ -145,7 +168,7 @@ impl<'t> sakuhiki_core::backend::RwTransaction<'t, MemDb> for Transaction {
         't: 'op,
         'op: 'kv,
     {
-        let data = cf.lock().unwrap().insert(key.to_vec(), value.to_vec());
+        let data = cf.cf.lock().unwrap().insert(key.to_vec(), value.to_vec());
         Box::pin(ready(Ok(data)))
     }
 
@@ -158,7 +181,7 @@ impl<'t> sakuhiki_core::backend::RwTransaction<'t, MemDb> for Transaction {
         't: 'op,
         'op: 'key,
     {
-        let data = cf.lock().unwrap().remove(key);
+        let data = cf.cf.lock().unwrap().remove(key);
         Box::pin(ready(Ok(data)))
     }
 }

@@ -1,4 +1,7 @@
-use sakuhiki_core::{Backend, CfError, Index, Indexer, backend::RwTransaction as _};
+use sakuhiki_core::{
+    Backend, CfError, Index, Indexer,
+    backend::{BackendCf as _, RwTransaction as _},
+};
 
 use crate::{BTreeQuery, Key};
 
@@ -39,7 +42,7 @@ where
                 transaction
                     .put(&cfs[0], &key, &[])
                     .await
-                    .map_err(|e| CfError::new("", e))?; // TODO(med): give proper name
+                    .map_err(|e| CfError::new(cfs[0].name(), e))?;
             }
             Ok(())
         })
@@ -60,7 +63,7 @@ where
                 transaction
                     .put(&cfs[0], &key, &[])
                     .await
-                    .map_err(|e| CfError::new("", e))?; // TODO(med): give proper name
+                    .map_err(|e| CfError::new(cfs[0].name(), e))?;
             }
             Ok(())
         })

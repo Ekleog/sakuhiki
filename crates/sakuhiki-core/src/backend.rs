@@ -62,7 +62,7 @@ where
 
 macro_rules! transaction_fn {
     ($fn:ident, $cf:ident, $transac:ident) => {
-        type $cf<'t>: waaa::Send + waaa::Sync;
+        type $cf<'t>: BackendCf;
 
         type $transac<'t>: waaa::Send + waaa::Sync + $transac<'t, Self>;
 
@@ -93,8 +93,12 @@ pub trait Backend: 'static {
 
     type CfHandleFuture<'db>: Future<Output = Result<Self::Cf<'db>, Self::Error>>;
 
-    fn cf_handle<'db>(&'db self, name: &str) -> Self::CfHandleFuture<'db>;
+    fn cf_handle<'db>(&'db self, name: &'static str) -> Self::CfHandleFuture<'db>;
 
     transaction_fn!(ro_transaction, RoTransactionCf, RoTransaction);
     transaction_fn!(rw_transaction, RwTransactionCf, RwTransaction);
+}
+
+pub trait BackendCf: waaa::Send + waaa::Sync {
+    fn name(&self) -> &'static str;
 }
