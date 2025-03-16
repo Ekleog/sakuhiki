@@ -62,10 +62,10 @@ macro_rules! transaction_impl {
                 let mut transaction_cfs = Vec::with_capacity(cfs.len());
                 for (i, &cf) in cfs {
                     let cf = self.db.get(cf).ok_or(Error::NonExistentColumnFamily)?;
-                    transaction_cfs.push((i, cf.$locker().await));
+                    transaction_cfs.push((i, $mapper(cf.$locker().await)));
                 }
                 transaction_cfs.sort_by_key(|e| e.0);
-                let transaction_cfs = transaction_cfs.into_iter().map($mapper).collect::<Vec<_>>();
+                let transaction_cfs = transaction_cfs.into_iter().map(|(_, cf)| cf).collect::<Vec<_>>();
                 Ok(actions(&(), t, transaction_cfs).await)
             })
         }
@@ -88,15 +88,8 @@ impl sakuhiki_core::Backend for MemDb {
         ready(Ok(name.to_string()))
     }
 
-    transaction_impl!(ro_transaction, read, |(_, cf)| cf, RoCf, RoTransaction);
-
-    transaction_impl!(
-        rw_transaction,
-        write,
-        |(_, cf)| Mutex::new(cf),
-        RwCf,
-        RwTransaction
-    );
+    transaction_impl!(ro_transaction, read, |cf| cf, RoCf, RoTransaction);
+    transaction_impl!(rw_transaction, write, Mutex::new, RwCf, RwTransaction);
 }
 
 pub struct Transaction {
