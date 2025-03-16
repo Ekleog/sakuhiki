@@ -78,4 +78,22 @@ where
     K: Key,
 {
     type Query<'q> = BTreeQuery<'q, K>;
+
+    fn query_ro<'op, 'q, 't>(
+        &self,
+        _query: &'q Self::Query<'q>,
+        _transaction: &'op B::RoTransaction<'t>,
+        _cfs: &'op [B::RoTransactionCf<'t>],
+    ) -> waaa::BoxStream<'q, Option<(B::Key<'op>, B::Value<'op>)>> {
+        todo!()
+    }
+
+    fn query_rw<'op, 'q, 't>(
+        &self,
+        _query: &'q Self::Query<'q>,
+        _transaction: &'op B::RwTransaction<'t>,
+        _cfs: &'op [B::RwTransactionCf<'t>],
+    ) -> waaa::BoxStream<'q, Option<(B::Key<'op>, B::Value<'op>)>> {
+        todo!() // TODO(high): merge with query_ro in another big macro
+    }
 }
