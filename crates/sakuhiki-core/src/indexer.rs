@@ -1,4 +1,4 @@
-use crate::{Backend, Datum, IndexError};
+use crate::{Backend, CfError, Datum, IndexError};
 
 pub trait Indexer<B: Backend>: waaa::Send + waaa::Sync {
     type Datum: Datum;
@@ -11,7 +11,7 @@ pub trait Indexer<B: Backend>: waaa::Send + waaa::Sync {
         datum: &'fut Self::Datum,
         transaction: &'fut B::RwTransaction<'t>,
         cfs: &'fut [B::RwTransactionCf<'t>],
-    ) -> waaa::BoxFuture<'fut, Result<(), B::Error>>;
+    ) -> waaa::BoxFuture<'fut, Result<(), CfError<B::Error>>>;
 
     fn unindex<'fut, 't>(
         &'fut self,
@@ -19,7 +19,7 @@ pub trait Indexer<B: Backend>: waaa::Send + waaa::Sync {
         datum: &'fut Self::Datum,
         transaction: &'fut B::RwTransaction<'t>,
         cfs: &'fut [B::RwTransactionCf<'t>],
-    ) -> waaa::BoxFuture<'fut, Result<(), B::Error>>;
+    ) -> waaa::BoxFuture<'fut, Result<(), CfError<B::Error>>>;
 
     #[allow(clippy::type_complexity)] // No good way to cut this smaller
     fn index_from_slice<'fut, 't>(
@@ -34,7 +34,7 @@ pub trait Indexer<B: Backend>: waaa::Send + waaa::Sync {
             let datum = Self::Datum::from_slice(slice).map_err(IndexError::Parsing)?;
             self.index(object_key, &datum, transaction, cfs)
                 .await
-                .map_err(|e| IndexError::backend("", e)) // TODO(med): use proper cf name here
+                .map_err(IndexError::Backend)
         })
     }
 
@@ -51,7 +51,7 @@ pub trait Indexer<B: Backend>: waaa::Send + waaa::Sync {
             let datum = Self::Datum::from_slice(slice).map_err(IndexError::Parsing)?;
             self.unindex(object_key, &datum, transaction, cfs)
                 .await
-                .map_err(|e| IndexError::backend("", e)) // TODO(med): use proper cf name here
+                .map_err(IndexError::Backend)
         })
     }
 }

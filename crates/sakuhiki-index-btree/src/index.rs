@@ -1,4 +1,4 @@
-use sakuhiki_core::{Backend, Index, Indexer, backend::RwTransaction as _};
+use sakuhiki_core::{Backend, CfError, Index, Indexer, backend::RwTransaction as _};
 
 use crate::{BTreeQuery, Key};
 
@@ -30,13 +30,16 @@ where
         datum: &'fut Self::Datum,
         transaction: &'fut B::RwTransaction<'t>,
         cfs: &'fut [B::RwTransactionCf<'t>],
-    ) -> waaa::BoxFuture<'fut, Result<(), B::Error>> {
+    ) -> waaa::BoxFuture<'fut, Result<(), CfError<B::Error>>> {
         Box::pin(async move {
             let mut key = Vec::with_capacity(self.key.len_hint(datum) + object_key.len());
             let do_index = self.key.extract_key(datum, &mut key);
             if do_index {
                 key.extend(object_key);
-                transaction.put(&cfs[0], &key, &[]).await?;
+                transaction
+                    .put(&cfs[0], &key, &[])
+                    .await
+                    .map_err(|e| CfError::new("", e))?; // TODO(med): give proper name
             }
             Ok(())
         })
@@ -48,13 +51,16 @@ where
         datum: &'fut Self::Datum,
         transaction: &'fut B::RwTransaction<'t>,
         cfs: &'fut [B::RwTransactionCf<'t>],
-    ) -> waaa::BoxFuture<'fut, Result<(), B::Error>> {
+    ) -> waaa::BoxFuture<'fut, Result<(), CfError<B::Error>>> {
         Box::pin(async move {
             let mut key = Vec::with_capacity(self.key.len_hint(datum) + object_key.len());
             let do_index = self.key.extract_key(datum, &mut key);
             if do_index {
                 key.extend(object_key);
-                transaction.put(&cfs[0], &key, &[]).await?;
+                transaction
+                    .put(&cfs[0], &key, &[])
+                    .await
+                    .map_err(|e| CfError::new("", e))?; // TODO(med): give proper name
             }
             Ok(())
         })
