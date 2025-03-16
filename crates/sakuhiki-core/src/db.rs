@@ -175,48 +175,56 @@ where
     ro_transaction_methods!(RwTransactionCf);
 
     // TODO(med): rename into put_slice, add put
-    pub async fn put<'op, D>(
+    pub async fn put<'op, 'kv, D>(
         &'op self,
         cf: &'op RwTransactionCf<'t, B>,
-        key: &'op [u8],
-        value: &'op [u8],
-    ) -> Result<(), IndexError<B::Error, D::Error>>
+        key: &'kv [u8],
+        value: &'kv [u8],
+    ) -> Result<Option<B::Value<'op>>, IndexError<B::Error, D::Error>>
     where
         D: IndexedDatum<B>,
     {
         debug_assert!(D::INDEXES.len() == cf.indexes_cfs.len());
-        // TODO(high): unindex old value... `put` will need to return old value?
-        self.transaction
+        let old = self
+            .transaction
             .put(&cf.datum_cf, key, value)
             .await
             .map_err(|_error| {
                 todo!() // TODO(med): must first add fn name() to the Cf family
             })?;
         for (i, cfs) in D::INDEXES.iter().zip(cf.indexes_cfs.iter()) {
+            if let Some(old) = &old {
+                i.unindex_from_slice(key, old.as_ref(), &self.transaction, cfs)
+                    .await?;
+            }
             i.index_from_slice(key, value, &self.transaction, cfs)
                 .await?;
         }
-        Ok(())
+        Ok(old)
     }
 
-    pub async fn delete<'op, D>(
+    pub async fn delete<'op, 'key, D>(
         &'op self,
         cf: &'op RwTransactionCf<'t, B>,
-        key: &'op [u8],
-    ) -> Result<(), IndexError<B::Error, D::Error>>
+        key: &'key [u8],
+    ) -> Result<Option<B::Value<'op>>, IndexError<B::Error, D::Error>>
     where
         D: IndexedDatum<B>,
     {
         debug_assert!(D::INDEXES.len() == cf.indexes_cfs.len());
-        self.transaction
+        let old = self
+            .transaction
             .delete(&cf.datum_cf, key)
             .await
             .map_err(|_error| {
                 todo!() // TODO(med): must first add fn name() to the Cf family
             })?;
-        for (_i, _cfs) in D::INDEXES.iter().zip(cf.indexes_cfs.iter()) {
-            // TODO(high): i.unindex_from_slice() with the return of the delete
+        if let Some(old) = &old {
+            for (i, cfs) in D::INDEXES.iter().zip(cf.indexes_cfs.iter()) {
+                i.unindex_from_slice(key, old.as_ref(), &self.transaction, cfs)
+                    .await?;
+            }
         }
-        Ok(())
+        Ok(old)
     }
 }
