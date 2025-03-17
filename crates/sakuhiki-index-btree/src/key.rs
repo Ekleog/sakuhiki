@@ -1,6 +1,6 @@
 use sakuhiki_core::Datum;
 
-pub trait Key: waaa::Send + waaa::Sync {
+pub trait Key: 'static + waaa::Send + waaa::Sync {
     type Datum: Datum;
 
     /// Hint about the length of the key that will be extracted from `datum`.

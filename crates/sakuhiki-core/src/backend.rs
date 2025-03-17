@@ -83,13 +83,12 @@ macro_rules! transaction_fn {
 }
 
 pub trait Backend: 'static {
-    type Error;
+    type Error: waaa::Send + waaa::Sync + std::error::Error;
 
     type Cf<'db>: waaa::Send + waaa::Sync;
 
-    type Key<'op>: AsRef<[u8]>;
-
-    type Value<'op>: AsRef<[u8]>;
+    type Key<'op>: waaa::Send + waaa::Sync + AsRef<[u8]>;
+    type Value<'op>: waaa::Send + waaa::Sync + AsRef<[u8]>;
 
     type CfHandleFuture<'db>: Future<Output = Result<Self::Cf<'db>, Self::Error>>;
 
