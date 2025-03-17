@@ -1,7 +1,7 @@
 use futures_util::StreamExt as _;
 use sakuhiki_core::{
     Backend, CfError, Index, Indexer,
-    backend::{BackendCf as _, RoTransaction as _, RwTransaction as _},
+    backend::{BackendCf as _, Transaction as _},
 };
 
 use crate::{BTreeQuery, Key};
@@ -32,8 +32,8 @@ where
         &'fut self,
         object_key: &'fut [u8],
         datum: &'fut Self::Datum,
-        transaction: &'fut B::RwTransaction<'t>,
-        cfs: &'fut [B::RwTransactionCf<'t>],
+        transaction: &'fut B::Transaction<'t>,
+        cfs: &'fut [B::TransactionCf<'t>],
     ) -> waaa::BoxFuture<'fut, Result<(), CfError<B::Error>>> {
         Box::pin(async move {
             let mut key = Vec::with_capacity(self.key.len_hint(datum) + object_key.len());
@@ -53,8 +53,8 @@ where
         &'fut self,
         object_key: &'fut [u8],
         datum: &'fut Self::Datum,
-        transaction: &'fut B::RwTransaction<'t>,
-        cfs: &'fut [B::RwTransactionCf<'t>],
+        transaction: &'fut B::Transaction<'t>,
+        cfs: &'fut [B::TransactionCf<'t>],
     ) -> waaa::BoxFuture<'fut, Result<(), CfError<B::Error>>> {
         Box::pin(async move {
             let mut key = Vec::with_capacity(self.key.len_hint(datum) + object_key.len());
@@ -83,12 +83,12 @@ where
     type Query<'q> = BTreeQuery<'q, K>;
     type QueryKey<'k> = Vec<u8>; // TODO(med): introduce a type to not allocate
 
-    fn query_ro<'q, 'op: 'q, 't: 'op>(
+    fn query<'q, 'op: 'q, 't: 'op>(
         &'q self,
         query: &'q Self::Query<'q>,
-        transaction: &'op B::RoTransaction<'t>,
-        object_cf: &'op B::RoTransactionCf<'t>,
-        cfs: &'op [B::RoTransactionCf<'t>],
+        transaction: &'op B::Transaction<'t>,
+        object_cf: &'op B::TransactionCf<'t>,
+        cfs: &'op [B::TransactionCf<'t>],
     ) -> waaa::BoxStream<'q, Result<(Self::QueryKey<'op>, B::Value<'op>), CfError<B::Error>>> {
         match query.query {
             crate::query::Query::Equal(_b) => todo!(), // TODO(high): introduce scan_prefix in backend
@@ -109,15 +109,5 @@ where
                 }))
             }
         }
-    }
-
-    fn query_rw<'q, 'op: 'q, 't: 'op>(
-        &self,
-        _query: &'q Self::Query<'q>,
-        _transaction: &'op B::RwTransaction<'t>,
-        _object_cf: &'op B::RwTransactionCf<'t>,
-        _cfs: &'op [B::RwTransactionCf<'t>],
-    ) -> waaa::BoxStream<'q, Result<(Self::QueryKey<'op>, B::Value<'op>), CfError<B::Error>>> {
-        todo!() // TODO(high): merge with query_ro in another big macro
     }
 }

@@ -72,7 +72,7 @@ async fn test_index() {
     backend.create_cf("datum-bar");
     let db = sakuhiki_core::Db::new(backend);
     let datum = db.cf_handle::<Datum>().await.unwrap();
-    db.rw_transaction(&[&datum], |t, [mut datum]| {
+    db.transaction(&[&datum], |t, [mut datum]| {
         Box::pin(async move {
             let d12 = Datum::new(1, 2);
             let d21 = Datum::new(2, 1);

@@ -6,57 +6,11 @@ use waaa::Stream;
 
 use crate::{
     Backend, CfError, IndexError, IndexedDatum, Indexer,
-    backend::{BackendCf as _, RoTransaction as _, RwTransaction as _},
+    backend::{BackendCf as _, Transaction as _},
 };
 
 pub struct Db<B> {
     backend: B,
-}
-
-macro_rules! transaction_fn {
-    ($fn:ident, $transac:ident, $cf:ident) => {
-        pub async fn $fn<'fut, const CFS: usize, F, Ret>(
-            &'fut self,
-            cfs: &'fut [&'fut Cf<'fut, B>; CFS],
-            actions: F,
-        ) -> Result<Ret, B::Error>
-        where
-            F: 'fut
-                + waaa::Send
-                + for<'t> FnOnce($transac<'t, B>, [$cf<'t, B>; CFS]) -> waaa::BoxFuture<'t, Ret>,
-        {
-            let backend_cfs = cfs
-                .iter()
-                .flat_map(|cf| {
-                    iter::once(&cf.datum_cf).chain(cf.indexes_cfs.iter().flat_map(|v| v.iter()))
-                })
-                .collect::<Vec<_>>();
-            let num_backend_cfs = backend_cfs.len();
-            self.backend
-                .$fn(&backend_cfs, move |_, transaction, backend_cfs| {
-                    debug_assert!(num_backend_cfs == backend_cfs.len());
-                    let mut backend_cfs = VecDeque::from(backend_cfs);
-                    let mut frontend_cfs = Vec::with_capacity(CFS);
-                    for d in 0..CFS {
-                        let datum_cf = backend_cfs.pop_front().unwrap();
-                        let mut indexes_cfs = Vec::with_capacity(cfs[d].indexes_cfs.len());
-                        for i in cfs[d].indexes_cfs.iter() {
-                            indexes_cfs.push(backend_cfs.drain(0..i.len()).collect());
-                        }
-                        frontend_cfs.push($cf {
-                            datum_cf,
-                            indexes_cfs,
-                        });
-                    }
-                    debug_assert!(backend_cfs.is_empty());
-                    let Ok(frontend_cfs) = frontend_cfs.try_into() else {
-                        panic!("unexpected number of cfs");
-                    };
-                    actions($transac { transaction }, frontend_cfs)
-                })
-                .await
-        }
-    };
 }
 
 impl<B> Db<B>
@@ -101,8 +55,50 @@ where
         })
     }
 
-    transaction_fn!(ro_transaction, RoTransaction, RoTransactionCf);
-    transaction_fn!(rw_transaction, RwTransaction, RwTransactionCf);
+    pub async fn transaction<'fut, const CFS: usize, F, Ret>(
+        &'fut self,
+        cfs: &'fut [&'fut Cf<'fut, B>; CFS],
+        actions: F,
+    ) -> Result<Ret, B::Error>
+    where
+        F: 'fut
+            + waaa::Send
+            + for<'t> FnOnce(
+                Transaction<'t, B>,
+                [TransactionCf<'t, B>; CFS],
+            ) -> waaa::BoxFuture<'t, Ret>,
+    {
+        let backend_cfs = cfs
+            .iter()
+            .flat_map(|cf| {
+                iter::once(&cf.datum_cf).chain(cf.indexes_cfs.iter().flat_map(|v| v.iter()))
+            })
+            .collect::<Vec<_>>();
+        let num_backend_cfs = backend_cfs.len();
+        self.backend
+            .transaction(&backend_cfs, move |_, transaction, backend_cfs| {
+                debug_assert!(num_backend_cfs == backend_cfs.len());
+                let mut backend_cfs = VecDeque::from(backend_cfs);
+                let mut frontend_cfs = Vec::with_capacity(CFS);
+                for d in 0..CFS {
+                    let datum_cf = backend_cfs.pop_front().unwrap();
+                    let mut indexes_cfs = Vec::with_capacity(cfs[d].indexes_cfs.len());
+                    for i in cfs[d].indexes_cfs.iter() {
+                        indexes_cfs.push(backend_cfs.drain(0..i.len()).collect());
+                    }
+                    frontend_cfs.push(TransactionCf {
+                        datum_cf,
+                        indexes_cfs,
+                    });
+                }
+                debug_assert!(backend_cfs.is_empty());
+                let Ok(frontend_cfs) = frontend_cfs.try_into() else {
+                    panic!("unexpected number of cfs");
+                };
+                actions(Transaction { transaction }, frontend_cfs)
+            })
+            .await
+    }
 }
 
 pub struct Cf<'db, B>
@@ -113,71 +109,50 @@ where
     indexes_cfs: Vec<Vec<B::Cf<'db>>>,
 }
 
-macro_rules! transaction_structs {
-    ($transac:ident, $cf:ident) => {
-        pub struct $transac<'t, B>
-        where
-            B: 't + Backend,
-        {
-            transaction: B::$transac<'t>,
-        }
-
-        pub struct $cf<'t, B>
-        where
-            B: Backend,
-        {
-            datum_cf: B::$cf<'t>,
-            #[allow(dead_code)] // TODO(high): will become used for Ro once queries are done
-            indexes_cfs: Vec<Vec<B::$cf<'t>>>,
-        }
-    };
+pub struct Transaction<'t, B>
+where
+    B: 't + Backend,
+{
+    transaction: B::Transaction<'t>,
 }
 
-transaction_structs!(RoTransaction, RoTransactionCf);
-transaction_structs!(RwTransaction, RwTransactionCf);
-
-macro_rules! ro_transaction_methods {
-    ($cf:ident) => {
-        pub async fn get<'op, 'key>(
-            &'op self,
-            cf: &'op $cf<'t, B>,
-            key: &'key [u8],
-        ) -> Result<Option<B::Value<'op>>, B::Error> {
-            self.transaction.get(&cf.datum_cf, key).await
-        }
-
-        pub fn scan<'op, 'keys, Keys>(
-            &'op self,
-            cf: &'op $cf<'t, B>,
-            keys: Keys,
-        ) -> impl Stream<Item = Result<(B::Key<'op>, B::Value<'op>), B::Error>>
-        + use<'t, 'op, 'keys, B, Keys>
-        where
-            Keys: 'keys + RangeBounds<[u8]>,
-            'op: 'keys,
-        {
-            self.transaction.scan(&cf.datum_cf, keys)
-        }
-    };
-}
-
-impl<'t, B> RoTransaction<'t, B>
+pub struct TransactionCf<'t, B>
 where
     B: Backend,
 {
-    ro_transaction_methods!(RoTransactionCf);
+    datum_cf: B::TransactionCf<'t>,
+    #[allow(dead_code)] // TODO(high): will become used for Ro once queries are done
+    indexes_cfs: Vec<Vec<B::TransactionCf<'t>>>,
 }
 
-impl<'t, B> RwTransaction<'t, B>
+impl<'t, B> Transaction<'t, B>
 where
     B: Backend,
 {
-    ro_transaction_methods!(RwTransactionCf);
+    pub async fn get<'op, 'key>(
+        &'op self,
+        cf: &'op TransactionCf<'t, B>,
+        key: &'key [u8],
+    ) -> Result<Option<B::Value<'op>>, B::Error> {
+        self.transaction.get(&cf.datum_cf, key).await
+    }
+
+    pub fn scan<'op, 'keys, Keys>(
+        &'op self,
+        cf: &'op TransactionCf<'t, B>,
+        keys: Keys,
+    ) -> impl Stream<Item = Result<(B::Key<'op>, B::Value<'op>), B::Error>> + use<'t, 'op, 'keys, B, Keys>
+    where
+        Keys: 'keys + RangeBounds<[u8]>,
+        'op: 'keys,
+    {
+        self.transaction.scan(&cf.datum_cf, keys)
+    }
 
     // TODO(med): rename into put_slice, add put
     pub async fn put<'op, 'kv, D>(
         &'op self,
-        cf: &'op RwTransactionCf<'t, B>,
+        cf: &'op TransactionCf<'t, B>,
         key: &'kv [u8],
         value: &'kv [u8],
     ) -> Result<Option<B::Value<'op>>, IndexError<B::Error, D::Error>>
@@ -203,7 +178,7 @@ where
 
     pub async fn delete<'op, 'key, D>(
         &'op self,
-        cf: &'op RwTransactionCf<'t, B>,
+        cf: &'op TransactionCf<'t, B>,
         key: &'key [u8],
     ) -> Result<Option<B::Value<'op>>, IndexError<B::Error, D::Error>>
     where
