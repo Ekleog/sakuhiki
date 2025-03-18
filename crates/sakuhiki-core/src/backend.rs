@@ -17,6 +17,7 @@ where
         'op: 'key;
 
     // TODO(low): do we need get_many / multi_get?
+    #[allow(clippy::type_complexity)] // No meaningful way to split the type
     fn scan<'op, 'keys>(
         &'op self,
         cf: &'op B::TransactionCf<'t>,

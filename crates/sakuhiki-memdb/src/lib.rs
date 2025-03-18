@@ -22,7 +22,7 @@ pub struct TransactionCf<'t> {
     name: &'static str,
 }
 
-impl<'t> BackendCf for TransactionCf<'t> {
+impl BackendCf for TransactionCf<'_> {
     fn name(&self) -> &'static str {
         self.name
     }

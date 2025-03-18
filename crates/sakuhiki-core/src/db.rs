@@ -80,10 +80,10 @@ where
                 debug_assert!(num_backend_cfs == backend_cfs.len());
                 let mut backend_cfs = VecDeque::from(backend_cfs);
                 let mut frontend_cfs = Vec::with_capacity(CFS);
-                for d in 0..CFS {
+                for cf in cfs {
                     let datum_cf = backend_cfs.pop_front().unwrap();
-                    let mut indexes_cfs = Vec::with_capacity(cfs[d].indexes_cfs.len());
-                    for i in cfs[d].indexes_cfs.iter() {
+                    let mut indexes_cfs = Vec::with_capacity(cf.indexes_cfs.len());
+                    for i in cf.indexes_cfs.iter() {
                         indexes_cfs.push(backend_cfs.drain(0..i.len()).collect());
                     }
                     frontend_cfs.push(TransactionCf {
