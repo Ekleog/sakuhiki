@@ -136,14 +136,16 @@ where
         self.transaction.get(&cf.datum_cf, key).await
     }
 
-    pub fn scan<'op, 'keys, Keys>(
+    pub fn scan<'op, 'keys, Keys, R>(
         &'op self,
         cf: &'op TransactionCf<'t, B>,
         keys: Keys,
-    ) -> impl Stream<Item = Result<(B::Key<'op>, B::Value<'op>), B::Error>> + use<'t, 'op, 'keys, B, Keys>
+    ) -> impl Stream<Item = Result<(B::Key<'op>, B::Value<'op>), B::Error>>
+    + use<'t, 'op, 'keys, B, Keys, R>
     where
-        Keys: 'keys + RangeBounds<[u8]>,
         'op: 'keys,
+        Keys: 'keys + RangeBounds<R>,
+        R: ?Sized + AsRef<[u8]>,
     {
         self.transaction.scan(&cf.datum_cf, keys)
     }

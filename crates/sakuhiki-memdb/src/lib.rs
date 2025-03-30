@@ -1,7 +1,7 @@
 use std::{
     collections::BTreeMap,
     future::{Ready, ready},
-    ops::RangeBounds,
+    ops::{Bound, RangeBounds},
     sync::Mutex,
 };
 
@@ -121,20 +121,23 @@ impl<'t> sakuhiki_core::backend::Transaction<'t, MemDb> for Transaction {
             .map(|v| v.to_owned()))))
     }
 
-    fn scan<'op, 'keys>(
+    fn scan<'op, 'keys, R>(
         &'op self,
         cf: &'op TransactionCf<'t>,
-        keys: impl 'keys + RangeBounds<[u8]>,
+        keys: impl 'keys + RangeBounds<R>,
     ) -> waaa::BoxStream<'keys, Result<(Vec<u8>, Vec<u8>), Error>>
     where
         't: 'op,
         'op: 'keys,
+        R: ?Sized + AsRef<[u8]>,
     {
+        let start: Bound<&[u8]> = keys.start_bound().map(|k| k.as_ref());
+        let end: Bound<&[u8]> = keys.end_bound().map(|k| k.as_ref());
         Box::pin(stream::iter(
             cf.cf
                 .lock()
                 .unwrap()
-                .range(keys)
+                .range::<[u8], _>((start, end))
                 .map(|(k, v)| Ok((k.to_owned(), v.to_owned())))
                 .collect::<Vec<_>>(),
         ))

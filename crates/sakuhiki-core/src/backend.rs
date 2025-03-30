@@ -18,14 +18,44 @@ where
 
     // TODO(low): do we need get_many / multi_get?
     #[allow(clippy::type_complexity)] // No meaningful way to split the type
-    fn scan<'op, 'keys>(
+    fn scan<'op, 'keys, R>(
         &'op self,
         cf: &'op B::TransactionCf<'t>,
-        keys: impl 'keys + RangeBounds<[u8]>,
+        keys: impl 'keys + RangeBounds<R>,
     ) -> waaa::BoxStream<'keys, Result<(B::Key<'op>, B::Value<'op>), B::Error>>
     where
         't: 'op,
-        'op: 'keys;
+        'op: 'keys,
+        R: ?Sized + AsRef<[u8]>;
+
+    fn scan_prefix<'op, 'key>(
+        &'op self,
+        cf: &'op B::TransactionCf<'t>,
+        prefix: &'key [u8],
+    ) -> waaa::BoxStream<'key, Result<(B::Key<'op>, B::Value<'op>), B::Error>>
+    where
+        't: 'op,
+        'op: 'key,
+    {
+        fn plus_one(prefix: &mut [u8]) -> bool {
+            let mut prefix = prefix.to_owned();
+            for b in prefix.iter_mut().rev() {
+                if *b < 0xFF {
+                    *b += 1;
+                    return true;
+                } else {
+                    *b = 0;
+                }
+            }
+            return false;
+        }
+        let mut prefix_plus_one = prefix.to_owned();
+        if plus_one(&mut prefix_plus_one) {
+            self.scan(cf, prefix.to_owned()..prefix_plus_one)
+        } else {
+            self.scan(cf, prefix..)
+        }
+    }
 
     fn put<'op, 'kv>(
         &'op self,
