@@ -6,7 +6,7 @@ use std::{
 };
 
 use async_lock::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
-use futures_util::stream;
+use futures_util::{StreamExt as _, stream};
 use sakuhiki_core::{
     CfError, DbBuilder,
     backend::{BackendBuilder, BackendCf, CfBuilder},
@@ -196,16 +196,33 @@ impl BackendBuilder for MemDbBuilder {
             let mut res = MemDb {
                 db: BTreeMap::new(),
             };
+
             for b in cf_builder_list {
                 if b.cfs.is_empty() || res.db.contains_key(b.cfs[0]) {
                     assert!(b.cfs.iter().all(|cf| res.db.contains_key(*cf)));
                     continue;
                 }
-                for cf in b.cfs {
+
+                for cf in b.cfs.iter() {
                     res.db
                         .insert(cf.to_string(), AsyncMutex::new(ColumnFamily::new()));
                 }
-                (b.builder)(&(), todo!(), todo!(), todo!()).await?; // TODO(high)
+
+                let cfs = stream::iter(b.cfs.iter())
+                    .then(async |cf| TransactionCf {
+                        name: cf,
+                        cf: Mutex::new(res.db.get(*cf).unwrap().lock().await),
+                    })
+                    .collect()
+                    .await;
+                let builds_using = match b.builds_using {
+                    None => None,
+                    Some(cf) => Some(TransactionCf {
+                        name: cf,
+                        cf: Mutex::new(res.db.get(cf).unwrap().lock().await),
+                    }),
+                };
+                (b.builder)(&(), Transaction { _private: () }, cfs, builds_using).await?;
             }
 
             Ok(res)
