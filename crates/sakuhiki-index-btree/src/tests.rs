@@ -64,12 +64,6 @@ impl<B: Backend> sakuhiki_core::IndexedDatum<B> for Datum {
 
 #[tokio::test]
 async fn test_index() {
-    // TODO(med): Should have a better migration story for adding/removing indexes
-    // Maybe just have create_cf be added to backend and auto-rebuilding?
-    let mut backend = sakuhiki_memdb::MemDb::new();
-    backend.create_cf("datum");
-    backend.create_cf("datum-foo");
-    backend.create_cf("datum-bar");
     let db = sakuhiki_memdb::MemDb::builder()
         .datum::<Datum>()
         .build()

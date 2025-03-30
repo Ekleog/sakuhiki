@@ -193,7 +193,7 @@ impl BackendBuilder for MemDbBuilder {
 
     fn build(self, cf_builder_list: Vec<CfBuilder<Self::Target>>) -> Self::BuildFuture {
         Box::pin(async move {
-            let res = MemDb {
+            let mut res = MemDb {
                 db: BTreeMap::new(),
             };
             for b in cf_builder_list {

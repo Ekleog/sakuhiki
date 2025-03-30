@@ -131,7 +131,7 @@ where
     pub cfs: Vec<&'static str>,
     pub builds_using: Option<&'static str>,
     pub builder: Box<
-        dyn for<'t> FnOnce(
+        for<'t> fn(
             &'t (),
             B::Transaction<'t>,
             Vec<B::TransactionCf<'t>>,
