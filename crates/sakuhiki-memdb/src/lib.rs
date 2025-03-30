@@ -7,7 +7,10 @@ use std::{
 
 use async_lock::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use futures_util::stream;
-use sakuhiki_core::backend::BackendCf;
+use sakuhiki_core::{
+    CfError,
+    backend::{BackendBuilder, BackendCf},
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -55,11 +58,13 @@ impl MemDb {
 impl sakuhiki_core::Backend for MemDb {
     type Error = Error;
 
-    type Key<'op> = Vec<u8>;
-    type Value<'op> = Vec<u8>;
+    type Builder = MemDbBuilder;
+
+    fn builder() -> MemDbBuilder {
+        MemDbBuilder::new()
+    }
 
     type Cf<'db> = &'static str;
-    type TransactionCf<'t> = TransactionCf<'t>;
 
     type CfHandleFuture<'op> = Ready<Result<Self::Cf<'op>, Self::Error>>;
 
@@ -68,6 +73,7 @@ impl sakuhiki_core::Backend for MemDb {
     }
 
     type Transaction<'t> = Transaction;
+    type TransactionCf<'t> = TransactionCf<'t>;
 
     fn ro_transaction<'fut, 'db, F, Ret>(
         &'fut self,
@@ -114,6 +120,9 @@ impl sakuhiki_core::Backend for MemDb {
     {
         self.ro_transaction(cfs, actions)
     }
+
+    type Key<'op> = Vec<u8>;
+    type Value<'op> = Vec<u8>;
 }
 
 pub struct Transaction {
@@ -185,5 +194,26 @@ impl<'t> sakuhiki_core::backend::Transaction<'t, MemDb> for Transaction {
     {
         let data = cf.cf.lock().unwrap().remove(key);
         Box::pin(ready(Ok(data)))
+    }
+}
+
+pub struct MemDbBuilder {}
+
+impl MemDbBuilder {
+    fn new() -> MemDbBuilder {
+        MemDbBuilder {}
+    }
+}
+
+impl BackendBuilder for MemDbBuilder {
+    type Target = MemDb;
+
+    type BuildFuture = waaa::BoxFuture<'static, Result<Self::Target, CfError<Error>>>;
+
+    fn build(
+        self,
+        _cf_builder_list: Vec<sakuhiki_core::backend::CfBuilder<Self::Target>>,
+    ) -> Self::BuildFuture {
+        todo!() // TODO(high): implement `build`
     }
 }
