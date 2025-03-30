@@ -2,6 +2,8 @@ use std::ops::RangeBounds;
 
 use waaa::Future;
 
+use crate::CfError;
+
 pub trait Transaction<'t, B: ?Sized + Backend>
 where
     Self: 't,
@@ -98,12 +100,13 @@ macro_rules! make_transaction_fn {
 pub trait Backend: 'static {
     type Error: waaa::Send + waaa::Sync + std::error::Error;
 
+    type Builder: BackendBuilder<Target = Self>;
+
+    fn builder() -> Self::Builder;
+
     type Cf<'db>: waaa::Send + waaa::Sync;
 
-    type Key<'op>: waaa::Send + waaa::Sync + AsRef<[u8]>;
-    type Value<'op>: waaa::Send + waaa::Sync + AsRef<[u8]>;
-
-    type CfHandleFuture<'db>: Future<Output = Result<Self::Cf<'db>, Self::Error>>;
+    type CfHandleFuture<'db>: waaa::Send + Future<Output = Result<Self::Cf<'db>, Self::Error>>;
 
     fn cf_handle<'db>(&'db self, name: &'static str) -> Self::CfHandleFuture<'db>;
 
@@ -112,8 +115,36 @@ pub trait Backend: 'static {
 
     make_transaction_fn!(ro_transaction);
     make_transaction_fn!(rw_transaction);
+
+    type Key<'op>: waaa::Send + waaa::Sync + AsRef<[u8]>;
+    type Value<'op>: waaa::Send + waaa::Sync + AsRef<[u8]>;
 }
 
 pub trait BackendCf: waaa::Send + waaa::Sync {
     fn name(&self) -> &'static str;
+}
+
+pub struct CfBuilder<B>
+where
+    B: Backend,
+{
+    pub cfs: Vec<&'static str>,
+    pub builds_using: Option<&'static str>,
+    pub builder: Box<
+        dyn for<'t> FnOnce(
+            &'t (),
+            B::Transaction<'t>,
+            Vec<B::TransactionCf<'t>>,
+            Option<B::TransactionCf<'t>>,
+        ) -> waaa::BoxFuture<'t, Result<(), B::Error>>,
+    >,
+}
+
+pub trait BackendBuilder {
+    type Target: Backend;
+
+    type BuildFuture: waaa::Send
+        + Future<Output = Result<Self::Target, CfError<<Self::Target as Backend>::Error>>>;
+
+    fn build(self, cf_builder_list: Vec<CfBuilder<Self::Target>>) -> Self::BuildFuture;
 }

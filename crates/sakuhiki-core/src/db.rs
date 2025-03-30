@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, iter, ops::RangeBounds};
+use std::{collections::VecDeque, future, iter, ops::RangeBounds};
 // TODO(blocked): use AsyncFn everywhere possible, once its return future can be marked Send/Sync
 
 use futures_util::{StreamExt as _, TryStreamExt as _, stream};
@@ -6,7 +6,7 @@ use waaa::Stream;
 
 use crate::{
     Backend, CfError, IndexError, IndexedDatum, Indexer,
-    backend::{BackendCf as _, Transaction as _},
+    backend::{BackendBuilder, BackendCf as _, CfBuilder, Transaction as _},
 };
 
 pub struct Db<B> {
@@ -66,8 +66,8 @@ impl<B> Db<B>
 where
     B: Backend,
 {
-    pub fn new(backend: B) -> Self {
-        Self { backend }
+    pub fn builder() -> DbBuilder<B::Builder> {
+        DbBuilder::new(B::builder())
     }
 
     // This is unsafe because it can lead to data corruption if there's
@@ -107,6 +107,58 @@ where
 
     make_transaction_fn!(ro_transaction);
     make_transaction_fn!(rw_transaction);
+}
+
+pub struct DbBuilder<Builder>
+where
+    Builder: BackendBuilder,
+{
+    builder: Builder,
+    cf_builder_list: Vec<CfBuilder<<Builder as BackendBuilder>::Target>>,
+}
+
+impl<Builder> DbBuilder<Builder>
+where
+    Builder: BackendBuilder,
+{
+    fn new(builder: Builder) -> Self {
+        Self {
+            builder,
+            cf_builder_list: Vec::new(),
+        }
+    }
+
+    pub fn config(mut self, f: impl FnOnce(&mut Builder)) -> Self {
+        f(&mut self.builder);
+        self
+    }
+
+    // TODO(med): add a way to kill all CFs that are not listed in one of the datum calls
+    pub fn datum<D: IndexedDatum<Builder::Target>>(mut self) -> Self {
+        self.cf_builder_list.push(CfBuilder {
+            cfs: vec![D::CF],
+            builds_using: None,
+            builder: Box::new(|_, _, _, _| Box::pin(future::ready(Ok(())))),
+        });
+        for index in D::INDEXES {
+            self.cf_builder_list.push(CfBuilder {
+                cfs: index.cfs().to_owned(),
+                builds_using: Some(D::CF),
+                builder: Box::new(|_, t, index_cfs, datum_cf| {
+                    let datum_cf = datum_cf.unwrap();
+                    let _ = (t, index_cfs, datum_cf);
+                    todo!() // TODO(high): implement index initial build
+                }),
+            })
+        }
+        self
+    }
+
+    pub async fn build(
+        self,
+    ) -> Result<Builder::Target, CfError<<Builder::Target as Backend>::Error>> {
+        self.builder.build(self.cf_builder_list).await
+    }
 }
 
 pub struct Cf<'db, B>
