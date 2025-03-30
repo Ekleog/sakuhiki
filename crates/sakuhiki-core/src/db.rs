@@ -66,8 +66,14 @@ impl<B> Db<B>
 where
     B: Backend,
 {
-    // This is unsafe because it can lead to data corruption if there's
-    // another writer in parallel with the index rebuilding.
+    /// Rebuild an index from scratch.
+    ///
+    /// This can help recover from data corruption.
+    ///
+    /// # Safety
+    ///
+    /// This is unsafe because it can lead to data corruption if there's
+    /// another writer in parallel with the index rebuilding.
     pub async unsafe fn rebuild_index<I: Indexer<B>>(
         &self,
         index: &'static I,
@@ -95,7 +101,7 @@ where
                 Box::pin(async move { index.rebuild(&t, &index_cfs, &datum_cf).await })
             })
             .await
-            .map_err(|e| IndexError::Backend(e))?
+            .map_err(IndexError::Backend)?
     }
 
     pub async fn cf_handle<D>(&self) -> Result<Cf<'_, B>, CfError<B::Error>>

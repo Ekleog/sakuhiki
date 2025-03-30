@@ -30,6 +30,7 @@ where
         'op: 'keys,
         R: ?Sized + AsRef<[u8]>;
 
+    #[allow(clippy::type_complexity)]
     fn scan_prefix<'op, 'key>(
         &'op self,
         cf: &'op B::TransactionCf<'t>,
@@ -49,7 +50,7 @@ where
                     *b = 0;
                 }
             }
-            return false;
+            false
         }
         let mut prefix_plus_one = prefix.to_owned();
         if plus_one(&mut prefix_plus_one) {
@@ -135,6 +136,7 @@ where
 {
     pub cfs: Vec<&'static str>,
     pub builds_using: Option<&'static str>,
+    #[allow(clippy::type_complexity)]
     pub builder: Box<
         dyn Send
             + for<'t> FnOnce(

@@ -82,7 +82,7 @@ where
     start: usize,
 }
 
-impl<'k, B> AsRef<[u8]> for BTreeQueryKey<'k, B>
+impl<B> AsRef<[u8]> for BTreeQueryKey<'_, B>
 where
     B: Backend,
 {
@@ -107,6 +107,7 @@ where
         object_cf: &'op B::TransactionCf<'t>,
         cfs: &'op [B::TransactionCf<'t>],
     ) -> waaa::BoxStream<'q, Result<(Self::QueryKey<'op>, B::Value<'op>), CfError<B::Error>>> {
+        #[allow(clippy::type_complexity)]
         let on_each_result = async |res: Result<(B::Key<'op>, B::Value<'op>), B::Error>| -> Result<
             (Self::QueryKey<'op>, B::Value<'op>),
             CfError<B::Error>,
