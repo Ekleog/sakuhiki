@@ -160,5 +160,9 @@ pub trait BackendBuilder {
             >,
         >;
 
-    fn build(self, cf_builder_list: Vec<CfBuilder<Self::Target>>) -> Self::BuildFuture;
+    fn build(
+        self,
+        cf_builder_list: Vec<CfBuilder<Self::Target>>,
+        drop_unknown_cfs: bool,
+    ) -> Self::BuildFuture;
 }

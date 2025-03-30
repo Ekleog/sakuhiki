@@ -140,6 +140,7 @@ where
 {
     builder: Builder,
     cf_builder_list: Vec<CfBuilder<<Builder as BackendBuilder>::Target>>,
+    drop_unknown_cfs: bool,
 }
 
 impl<Builder> DbBuilder<Builder>
@@ -151,6 +152,7 @@ where
         Self {
             builder,
             cf_builder_list: Vec::new(),
+            drop_unknown_cfs: false,
         }
     }
 
@@ -159,7 +161,6 @@ where
         self
     }
 
-    // TODO(med): add a way to kill all CFs that are not listed in one of the datum calls
     pub fn datum<D: IndexedDatum<Builder::Target>>(mut self) -> Self {
         self.cf_builder_list.push(CfBuilder {
             cfs: vec![D::CF],
@@ -179,6 +180,11 @@ where
         self
     }
 
+    pub fn drop_unknown_cfs(mut self, drop_unknown_cfs: bool) -> Self {
+        self.drop_unknown_cfs = drop_unknown_cfs;
+        self
+    }
+
     // Note: while a new index is building, no new data should be added!
     // This is especially important for eg. tikv that could have multiple concurrent clients.
     // TODO(med): figure out a way to lock writes while indexes are rebuilding
@@ -188,7 +194,10 @@ where
     ) -> Result<Db<Builder::Target>, IndexError<<Builder::Target as Backend>::Error, anyhow::Error>>
     {
         Ok(Db {
-            backend: self.builder.build(self.cf_builder_list).await?,
+            backend: self
+                .builder
+                .build(self.cf_builder_list, self.drop_unknown_cfs)
+                .await?,
         })
     }
 }

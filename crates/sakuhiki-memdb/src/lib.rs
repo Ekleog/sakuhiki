@@ -203,7 +203,11 @@ impl BackendBuilder for MemDbBuilder {
     type BuildFuture =
         waaa::BoxFuture<'static, Result<Self::Target, IndexError<Error, anyhow::Error>>>;
 
-    fn build(self, cf_builder_list: Vec<CfBuilder<Self::Target>>) -> Self::BuildFuture {
+    fn build(
+        self,
+        cf_builder_list: Vec<CfBuilder<Self::Target>>,
+        _drop_unknown_cfs: bool, // Never relevant, as we're always starting from scratch
+    ) -> Self::BuildFuture {
         Box::pin(async move {
             let mut res = MemDb {
                 db: BTreeMap::new(),
