@@ -43,17 +43,25 @@ impl sakuhiki_core::Datum for Datum {
 impl Datum {
     const INDEX_FOO: &'static BTreeIndex<FixedLenKey<Datum>> = &BTreeIndex::new(
         &["datum-foo"],
-        FixedLenKey::new(4, |d, key| {
-            key.copy_from_slice(&d.foo.to_be_bytes());
-            true
-        }),
+        FixedLenKey::new(
+            4,
+            |d, key| {
+                key.copy_from_slice(&d.foo.to_be_bytes());
+                true
+            },
+            None,
+        ),
     );
     const INDEX_BAR: &'static BTreeIndex<FixedLenKey<Datum>> = &BTreeIndex::new(
         &["datum-bar"],
-        FixedLenKey::new(4, |d, key| {
-            key.copy_from_slice(&d.bar.to_be_bytes());
-            true
-        }),
+        FixedLenKey::new(
+            4,
+            |d, key| {
+                key.copy_from_slice(&d.bar.to_be_bytes());
+                true
+            },
+            None,
+        ),
     );
 }
 

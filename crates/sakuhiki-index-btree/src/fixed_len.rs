@@ -2,17 +2,32 @@ use sakuhiki_core::Datum;
 
 use crate::Key;
 
-pub struct FixedLenKey<D> {
+pub struct FixedLenKey<D>
+where
+    D: Datum,
+{
     len: usize,
     extractor: fn(&D, &mut [u8]) -> bool,
+    #[allow(clippy::type_complexity)]
+    extractor_from_slice: Option<fn(&[u8], &mut [u8]) -> Result<bool, D::Error>>,
 }
 
 impl<D> FixedLenKey<D>
 where
     D: Datum,
 {
-    pub const fn new(len: usize, extractor: fn(&D, &mut [u8]) -> bool) -> Self {
-        Self { len, extractor }
+    /// `extractor` extracts from `&D` into `&mut [u8]
+    #[allow(clippy::type_complexity)]
+    pub const fn new(
+        len: usize,
+        extractor: fn(&D, &mut [u8]) -> bool,
+        extractor_from_slice: Option<fn(&[u8], &mut [u8]) -> Result<bool, D::Error>>,
+    ) -> Self {
+        Self {
+            len,
+            extractor,
+            extractor_from_slice,
+        }
     }
 }
 
@@ -30,6 +45,20 @@ where
     fn extract_key(&self, datum: &D, key: &mut Vec<u8>) -> bool {
         key.resize(self.len, 0);
         (self.extractor)(datum, &mut key[..])
+    }
+
+    fn len_hint_from_slice(&self, _: &[u8]) -> Result<usize, D::Error> {
+        Ok(self.len)
+    }
+
+    fn extract_key_from_slice(&self, slice: &[u8], key: &mut Vec<u8>) -> Result<bool, D::Error> {
+        key.resize(self.len, 0);
+        if let Some(extractor_from_slice) = self.extractor_from_slice {
+            (extractor_from_slice)(slice, &mut key[..])
+        } else {
+            let datum = D::from_slice(slice)?;
+            Ok((self.extractor)(&datum, &mut key[..]))
+        }
     }
 
     fn key_len(&self, in_slice: &[u8]) -> usize {
