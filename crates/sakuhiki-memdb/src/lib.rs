@@ -113,7 +113,7 @@ pub struct Transaction {
     _private: (),
 }
 
-#[warn(clippy::missing_trait_methods)]
+// #[warn(clippy::missing_trait_methods)] // MemDb is used only for tests, we can use default impls
 impl<'t> sakuhiki_core::backend::Transaction<'t, MemDb> for Transaction {
     fn get<'op, 'key>(
         &'op self,
