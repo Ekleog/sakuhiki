@@ -9,7 +9,7 @@ use async_lock::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use futures_util::stream;
 use sakuhiki_core::{
     CfError, DbBuilder,
-    backend::{BackendBuilder, BackendCf},
+    backend::{BackendBuilder, BackendCf, CfBuilder},
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -33,25 +33,6 @@ impl BackendCf for TransactionCf<'_> {
 
 pub struct MemDb {
     db: BTreeMap<String, AsyncMutex<ColumnFamily>>,
-}
-
-impl Default for MemDb {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl MemDb {
-    pub fn new() -> Self {
-        Self {
-            db: BTreeMap::new(),
-        }
-    }
-
-    pub fn create_cf(&mut self, cf: &'static str) {
-        self.db
-            .insert(cf.to_string(), AsyncMutex::new(ColumnFamily::new()));
-    }
 }
 
 #[warn(clippy::missing_trait_methods)]
@@ -210,10 +191,24 @@ impl BackendBuilder for MemDbBuilder {
 
     type BuildFuture = waaa::BoxFuture<'static, Result<Self::Target, CfError<Error>>>;
 
-    fn build(
-        self,
-        _cf_builder_list: Vec<sakuhiki_core::backend::CfBuilder<Self::Target>>,
-    ) -> Self::BuildFuture {
-        todo!() // TODO(high): implement `build`
+    fn build(self, cf_builder_list: Vec<CfBuilder<Self::Target>>) -> Self::BuildFuture {
+        Box::pin(async move {
+            let res = MemDb {
+                db: BTreeMap::new(),
+            };
+            for b in cf_builder_list {
+                if b.cfs.is_empty() || res.db.contains_key(b.cfs[0]) {
+                    assert!(b.cfs.iter().all(|cf| res.db.contains_key(*cf)));
+                    continue;
+                }
+                for cf in b.cfs {
+                    res.db
+                        .insert(cf.to_string(), AsyncMutex::new(ColumnFamily::new()));
+                }
+                (b.builder)(&(), todo!(), todo!(), todo!()).await?; // TODO(high)
+            }
+
+            Ok(res)
+        })
     }
 }

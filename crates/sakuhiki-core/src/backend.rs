@@ -136,7 +136,7 @@ where
             B::Transaction<'t>,
             Vec<B::TransactionCf<'t>>,
             Option<B::TransactionCf<'t>>,
-        ) -> waaa::BoxFuture<'t, Result<(), B::Error>>,
+        ) -> waaa::BoxFuture<'t, Result<(), CfError<B::Error>>>,
     >,
 }
 
