@@ -3,7 +3,7 @@ use sakuhiki_core::{
     backend::{BackendCf as _, Transaction as _},
 };
 
-use crate::{BTreeQuery, Key};
+use crate::{BTreeQuery, Key, query::Query};
 
 pub struct BTreeIndex<K> {
     cf: &'static [&'static str; 1],
@@ -107,20 +107,13 @@ where
         };
         Box::pin(async_stream::try_stream! {
             match query.query {
-                crate::query::Query::Equal(key) =>  {
-                    for await res in transaction.scan_prefix(&cfs[0], key) {
-                        let res = res.map_err(|e| CfError::new(cfs[0].name(), e))?;
-                        if self.key.key_len(res.0.as_ref()) == key.len() {
-                            yield on_each_result(res).await?;
-                        }
-                    }
-                }
-                crate::query::Query::Prefix(prefix) => {
+                Query::Prefix(prefix) =>  {
                     for await res in transaction.scan_prefix(&cfs[0], prefix) {
-                        yield on_each_result(res.map_err(|e| CfError::new(cfs[0].name(), e))?).await?;
+                        let res = res.map_err(|e| CfError::new(cfs[0].name(), e))?;
+                        yield on_each_result(res).await?;
                     }
                 }
-                crate::query::Query::Range { start, end } => {
+                Query::Range { start, end } => {
                     for await res in transaction.scan::<[u8]>(&cfs[0], (start, end)) {
                         yield on_each_result(res.map_err(|e| CfError::new(cfs[0].name(), e))?).await?;
                     }

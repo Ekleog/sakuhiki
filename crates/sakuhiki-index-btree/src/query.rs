@@ -14,7 +14,6 @@ where
 }
 
 pub(crate) enum Query<'q> {
-    Equal(&'q [u8]),
     Prefix(&'q [u8]),
     Range {
         start: Bound<&'q [u8]>,
@@ -28,7 +27,7 @@ where
 {
     pub fn equal(key: &'q [u8]) -> Self {
         Self {
-            query: Query::Equal(key),
+            query: Query::Prefix(key),
             _phantom: PhantomData,
         }
     }
