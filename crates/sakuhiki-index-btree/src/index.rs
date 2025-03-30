@@ -1,3 +1,4 @@
+use futures_util::StreamExt as _;
 use sakuhiki_core::{
     Backend, CfError, Index, Indexer,
     backend::{BackendCf as _, Transaction as _},
@@ -89,11 +90,11 @@ where
         object_cf: &'op B::TransactionCf<'t>,
         cfs: &'op [B::TransactionCf<'t>],
     ) -> waaa::BoxStream<'q, Result<(Self::QueryKey<'op>, B::Value<'op>), CfError<B::Error>>> {
-        let on_each_result = async |res: (B::Key<'op>, B::Value<'op>)| -> Result<
+        let on_each_result = async |res: Result<(B::Key<'op>, B::Value<'op>), B::Error>| -> Result<
             (Self::QueryKey<'op>, B::Value<'op>),
             CfError<B::Error>,
         > {
-            let (index_key, _) = res;
+            let (index_key, _) = res.map_err(|e| CfError::new(cfs[0].name(), e))?;
             let index_key = index_key.as_ref();
             let object_key = &index_key[self.key.key_len(index_key)..];
             Ok((
@@ -105,20 +106,13 @@ where
                     .expect("Object was present in index but not in real table"),
             ))
         };
-        Box::pin(async_stream::try_stream! {
-            match query.query {
-                Query::Prefix(prefix) =>  {
-                    for await res in transaction.scan_prefix(&cfs[0], prefix) {
-                        let res = res.map_err(|e| CfError::new(cfs[0].name(), e))?;
-                        yield on_each_result(res).await?;
-                    }
-                }
-                Query::Range { start, end } => {
-                    for await res in transaction.scan::<[u8]>(&cfs[0], (start, end)) {
-                        yield on_each_result(res.map_err(|e| CfError::new(cfs[0].name(), e))?).await?;
-                    }
-                }
-            }
+        Box::pin(match query.query {
+            Query::Prefix(prefix) => transaction
+                .scan_prefix(&cfs[0], prefix)
+                .then(on_each_result),
+            Query::Range { start, end } => transaction
+                .scan::<[u8]>(&cfs[0], (start, end))
+                .then(on_each_result),
         })
     }
 }
