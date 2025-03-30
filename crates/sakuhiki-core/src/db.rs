@@ -141,10 +141,9 @@ where
             self.cf_builder_list.push(CfBuilder {
                 cfs: index.cfs().to_owned(),
                 builds_using: Some(D::CF),
-                builder: Box::new(|_, t, index_cfs, datum_cf| {
+                builder: Box::new(move |_, t, index_cfs, datum_cf| {
                     let datum_cf = datum_cf.unwrap();
-                    let _ = (t, index_cfs, datum_cf);
-                    todo!() // TODO(high): implement index initial build
+                    Box::pin(async move { index.rebuild(&t, &index_cfs, &datum_cf).await })
                 }),
             })
         }
@@ -157,7 +156,8 @@ where
     // (eg. get_for_update exclusive=false on a metadata cf and exclusive=true when rebuilding the index)
     pub async fn build(
         self,
-    ) -> Result<Db<Builder::Target>, CfError<<Builder::Target as Backend>::Error>> {
+    ) -> Result<Db<Builder::Target>, IndexError<<Builder::Target as Backend>::Error, anyhow::Error>>
+    {
         Ok(Db {
             backend: self.builder.build(self.cf_builder_list).await?,
         })

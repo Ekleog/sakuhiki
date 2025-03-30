@@ -8,7 +8,7 @@ use std::{
 use async_lock::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use futures_util::{StreamExt as _, stream};
 use sakuhiki_core::{
-    CfError, DbBuilder,
+    DbBuilder, IndexError,
     backend::{BackendBuilder, BackendCf, CfBuilder},
 };
 
@@ -176,6 +176,14 @@ impl<'t> sakuhiki_core::backend::Transaction<'t, MemDb> for Transaction {
         let data = cf.cf.lock().unwrap().remove(key);
         Box::pin(ready(Ok(data)))
     }
+
+    fn clear<'op>(
+        &'op self,
+        cf: &'op <MemDb as sakuhiki_core::Backend>::TransactionCf<'t>,
+    ) -> waaa::BoxFuture<'op, Result<(), <MemDb as sakuhiki_core::Backend>::Error>> {
+        cf.cf.lock().unwrap().clear();
+        Box::pin(ready(Ok(())))
+    }
 }
 
 pub struct MemDbBuilder {}
@@ -189,7 +197,8 @@ impl MemDbBuilder {
 impl BackendBuilder for MemDbBuilder {
     type Target = MemDb;
 
-    type BuildFuture = waaa::BoxFuture<'static, Result<Self::Target, CfError<Error>>>;
+    type BuildFuture =
+        waaa::BoxFuture<'static, Result<Self::Target, IndexError<Error, anyhow::Error>>>;
 
     fn build(self, cf_builder_list: Vec<CfBuilder<Self::Target>>) -> Self::BuildFuture {
         Box::pin(async move {

@@ -4,7 +4,7 @@ use crate::{Backend, Indexer};
 
 pub trait Datum: 'static + Send + Sync + Sized {
     const CF: &'static str;
-    type Error: Debug + Error;
+    type Error: Send + Sync + Debug + Error;
     fn from_slice(datum: &[u8]) -> Result<Self, Self::Error>;
 }
 

@@ -2,7 +2,7 @@ use std::ops::RangeBounds;
 
 use waaa::Future;
 
-use crate::{CfError, DbBuilder};
+use crate::{DbBuilder, IndexError};
 
 pub trait Transaction<'t, B: ?Sized + Backend>
 where
@@ -77,6 +77,11 @@ where
     where
         't: 'op,
         'op: 'key;
+
+    fn clear<'op>(
+        &'op self,
+        cf: &'op B::TransactionCf<'t>,
+    ) -> waaa::BoxFuture<'op, Result<(), B::Error>>;
 }
 
 macro_rules! make_transaction_fn {
@@ -131,12 +136,14 @@ where
     pub cfs: Vec<&'static str>,
     pub builds_using: Option<&'static str>,
     pub builder: Box<
-        for<'t> fn(
-            &'t (),
-            B::Transaction<'t>,
-            Vec<B::TransactionCf<'t>>,
-            Option<B::TransactionCf<'t>>,
-        ) -> waaa::BoxFuture<'t, Result<(), CfError<B::Error>>>,
+        dyn Send
+            + for<'t> FnOnce(
+                &'t (),
+                B::Transaction<'t>,
+                Vec<B::TransactionCf<'t>>,
+                Option<B::TransactionCf<'t>>,
+            )
+                -> waaa::BoxFuture<'t, Result<(), IndexError<B::Error, anyhow::Error>>>,
     >,
 }
 
@@ -144,7 +151,12 @@ pub trait BackendBuilder {
     type Target: Backend;
 
     type BuildFuture: waaa::Send
-        + Future<Output = Result<Self::Target, CfError<<Self::Target as Backend>::Error>>>;
+        + Future<
+            Output = Result<
+                Self::Target,
+                IndexError<<Self::Target as Backend>::Error, anyhow::Error>,
+            >,
+        >;
 
     fn build(self, cf_builder_list: Vec<CfBuilder<Self::Target>>) -> Self::BuildFuture;
 }

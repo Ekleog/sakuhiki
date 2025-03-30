@@ -28,6 +28,7 @@ sakuhiki-indexed-db = { path = "crates/sakuhiki-indexed-db" }
 sakuhiki-memdb = { path = "crates/sakuhiki-memdb" }
 sakuhiki-rocksdb = { path = "crates/sakuhiki-rocksdb" }
 
+anyhow = "1.0"
 async-lock = "3.4"
 async-stream = "0.3.6"
 futures-util = "0.3.31"
