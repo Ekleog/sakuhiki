@@ -17,6 +17,7 @@ impl<K> BTreeIndex<K> {
     }
 }
 
+#[warn(clippy::missing_trait_methods)]
 impl<B, K> Indexer<B> for BTreeIndex<K>
 where
     B: Backend,
@@ -73,6 +74,7 @@ where
     // TODO(med): implement _from_slice variants with the KeyExtractor-specific method
 }
 
+#[warn(clippy::missing_trait_methods)]
 impl<B, K> Index<B> for BTreeIndex<K>
 where
     B: Backend,

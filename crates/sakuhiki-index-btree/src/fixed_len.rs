@@ -16,6 +16,7 @@ where
     }
 }
 
+#[warn(clippy::missing_trait_methods)]
 impl<D> Key for FixedLenKey<D>
 where
     D: Datum,

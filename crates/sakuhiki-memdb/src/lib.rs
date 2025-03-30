@@ -51,6 +51,7 @@ impl MemDb {
     }
 }
 
+#[warn(clippy::missing_trait_methods)]
 impl sakuhiki_core::Backend for MemDb {
     type Error = Error;
 
@@ -102,6 +103,7 @@ pub struct Transaction {
     _private: (),
 }
 
+#[warn(clippy::missing_trait_methods)]
 impl<'t> sakuhiki_core::backend::Transaction<'t, MemDb> for Transaction {
     fn get<'op, 'key>(
         &'op self,
