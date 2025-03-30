@@ -73,8 +73,6 @@ where
     // TODO(med): implement _from_slice variants with the KeyExtractor-specific method
 }
 
-// TODO(high): kill the split between ro and rw transaction types: idb, rocksdb and tikv can all do without
-
 impl<B, K> Index<B> for BTreeIndex<K>
 where
     B: Backend,
