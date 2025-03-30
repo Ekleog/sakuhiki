@@ -74,6 +74,23 @@ where
     // TODO(med): implement _from_slice variants with the KeyExtractor-specific method
 }
 
+pub struct BTreeQueryKey<'k, B>
+where
+    B: Backend,
+{
+    key: B::Key<'k>,
+    start: usize,
+}
+
+impl<'k, B> AsRef<[u8]> for BTreeQueryKey<'k, B>
+where
+    B: Backend,
+{
+    fn as_ref(&self) -> &[u8] {
+        &self.key.as_ref()[self.start..]
+    }
+}
+
 #[warn(clippy::missing_trait_methods)]
 impl<B, K> Index<B> for BTreeIndex<K>
 where
@@ -81,7 +98,7 @@ where
     K: Key,
 {
     type Query<'q> = BTreeQuery<'q, K>;
-    type QueryKey<'k> = Vec<u8>; // TODO(med): introduce a type to not allocate
+    type QueryKey<'k> = BTreeQueryKey<'k, B>;
 
     fn query<'q, 'op: 'q, 't: 'op>(
         &'q self,
@@ -95,16 +112,17 @@ where
             CfError<B::Error>,
         > {
             let (index_key, _) = res.map_err(|e| CfError::new(cfs[0].name(), e))?;
-            let index_key = index_key.as_ref();
-            let object_key = &index_key[self.key.key_len(index_key)..];
-            Ok((
-                object_key.to_owned(),
-                transaction
-                    .get(object_cf, object_key)
-                    .await
-                    .map_err(|e| CfError::new(object_cf.name(), e))?
-                    .expect("Object was present in index but not in real table"),
-            ))
+            let key_len = self.key.key_len(index_key.as_ref());
+            let object_key = BTreeQueryKey {
+                key: index_key,
+                start: key_len,
+            };
+            let object_value = transaction
+                .get(object_cf, object_key.as_ref())
+                .await
+                .map_err(|e| CfError::new(object_cf.name(), e))?
+                .expect("Object was present in index but not in real table");
+            Ok((object_key, object_value))
         };
         Box::pin(match query.query {
             Query::Prefix(prefix) => transaction
