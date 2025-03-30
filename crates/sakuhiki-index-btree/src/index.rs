@@ -1,6 +1,6 @@
 use futures_util::StreamExt as _;
 use sakuhiki_core::{
-    Backend, CfError, Index, Indexer,
+    Backend, CfError, Datum, Index, IndexError, Indexer,
     backend::{BackendCf as _, Transaction as _},
 };
 
@@ -71,7 +71,66 @@ where
         })
     }
 
-    // TODO(med): implement _from_slice variants with the KeyExtractor-specific method
+    fn index_from_slice<'fut, 't>(
+        &'fut self,
+        object_key: &'fut [u8],
+        slice: &'fut [u8],
+        transaction: &'fut B::Transaction<'t>,
+        cfs: &'fut [B::TransactionCf<'t>],
+    ) -> waaa::BoxFuture<
+        'fut,
+        Result<(), IndexError<<B as Backend>::Error, <K::Datum as Datum>::Error>>,
+    > {
+        Box::pin(async move {
+            let mut key = Vec::with_capacity(
+                self.key
+                    .len_hint_from_slice(slice)
+                    .map_err(IndexError::Parsing)?
+                    + object_key.len(),
+            );
+            let do_index = self
+                .key
+                .extract_key_from_slice(slice, &mut key)
+                .map_err(IndexError::Parsing)?;
+            if do_index {
+                key.extend(object_key);
+                transaction
+                    .put(&cfs[0], &key, &[])
+                    .await
+                    .map_err(|e| IndexError::Backend(CfError::new(cfs[0].name(), e)))?;
+            }
+            Ok(())
+        })
+    }
+
+    fn unindex_from_slice<'fut, 't>(
+        &'fut self,
+        object_key: &'fut [u8],
+        slice: &'fut [u8],
+        transaction: &'fut B::Transaction<'t>,
+        cfs: &'fut [B::TransactionCf<'t>],
+    ) -> waaa::BoxFuture<'fut, Result<(), IndexError<B::Error, <K::Datum as Datum>::Error>>> {
+        Box::pin(async move {
+            let mut key = Vec::with_capacity(
+                self.key
+                    .len_hint_from_slice(slice)
+                    .map_err(IndexError::Parsing)?
+                    + object_key.len(),
+            );
+            let do_index = self
+                .key
+                .extract_key_from_slice(slice, &mut key)
+                .map_err(IndexError::Parsing)?;
+            if do_index {
+                key.extend(object_key);
+                transaction
+                    .put(&cfs[0], &key, &[])
+                    .await
+                    .map_err(|e| IndexError::Backend(CfError::new(cfs[0].name(), e)))?;
+            }
+            Ok(())
+        })
+    }
 }
 
 pub struct BTreeQueryKey<'k, B>
