@@ -69,7 +69,7 @@ impl sakuhiki_core::Backend for MemDb {
 
     type Transaction<'t> = Transaction;
 
-    fn transaction<'fut, 'db, F, Ret>(
+    fn ro_transaction<'fut, 'db, F, Ret>(
         &'fut self,
         cfs: &'fut [&'fut Self::Cf<'db>],
         actions: F,
@@ -96,6 +96,23 @@ impl sakuhiki_core::Backend for MemDb {
                 .collect::<Vec<_>>();
             Ok(actions(&(), t, transaction_cfs).await)
         })
+    }
+
+    fn rw_transaction<'fut, 'db, F, Ret>(
+        &'fut self,
+        cfs: &'fut [&'fut Self::Cf<'db>],
+        actions: F,
+    ) -> waaa::BoxFuture<'fut, Result<Ret, Self::Error>>
+    where
+        F: 'fut
+            + waaa::Send
+            + for<'t> FnOnce(
+                &'t (),
+                Self::Transaction<'t>,
+                Vec<Self::TransactionCf<'t>>,
+            ) -> waaa::BoxFuture<'t, Ret>,
+    {
+        self.ro_transaction(cfs, actions)
     }
 }
 

@@ -15,6 +15,56 @@ pub struct Db<B> {
     index_rebuilding_lock: RwLock<()>,
 }
 
+macro_rules! make_transaction_fn {
+    ($name:ident) => {
+        pub async fn $name<'fut, const CFS: usize, F, Ret>(
+            &'fut self,
+            cfs: &'fut [&'fut Cf<'fut, B>; CFS],
+            actions: F,
+        ) -> Result<Ret, B::Error>
+        where
+            F: 'fut
+                + waaa::Send
+                + for<'t> FnOnce(
+                    Transaction<'t, B>,
+                    [TransactionCf<'t, B>; CFS],
+                ) -> waaa::BoxFuture<'t, Ret>,
+        {
+            let _index_rebuilding_lock = self.index_rebuilding_lock.read().await;
+            let backend_cfs = cfs
+                .iter()
+                .flat_map(|cf| {
+                    iter::once(&cf.datum_cf).chain(cf.indexes_cfs.iter().flat_map(|v| v.iter()))
+                })
+                .collect::<Vec<_>>();
+            let num_backend_cfs = backend_cfs.len();
+            self.backend
+                .$name(&backend_cfs, move |_, transaction, backend_cfs| {
+                    debug_assert!(num_backend_cfs == backend_cfs.len());
+                    let mut backend_cfs = VecDeque::from(backend_cfs);
+                    let mut frontend_cfs = Vec::with_capacity(CFS);
+                    for cf in cfs {
+                        let datum_cf = backend_cfs.pop_front().unwrap();
+                        let mut indexes_cfs = Vec::with_capacity(cf.indexes_cfs.len());
+                        for i in cf.indexes_cfs.iter() {
+                            indexes_cfs.push(backend_cfs.drain(0..i.len()).collect());
+                        }
+                        frontend_cfs.push(TransactionCf {
+                            datum_cf,
+                            indexes_cfs,
+                        });
+                    }
+                    debug_assert!(backend_cfs.is_empty());
+                    let Ok(frontend_cfs) = frontend_cfs.try_into() else {
+                        panic!("unexpected number of cfs");
+                    };
+                    actions(Transaction { transaction }, frontend_cfs)
+                })
+                .await
+        }
+    };
+}
+
 impl<B> Db<B>
 where
     B: Backend,
@@ -60,52 +110,8 @@ where
         })
     }
 
-    // TODO(high): need ro_transaction and rw_transaction but with the same types for indexed_db
-    pub async fn transaction<'fut, const CFS: usize, F, Ret>(
-        &'fut self,
-        cfs: &'fut [&'fut Cf<'fut, B>; CFS],
-        actions: F,
-    ) -> Result<Ret, B::Error>
-    where
-        F: 'fut
-            + waaa::Send
-            + for<'t> FnOnce(
-                Transaction<'t, B>,
-                [TransactionCf<'t, B>; CFS],
-            ) -> waaa::BoxFuture<'t, Ret>,
-    {
-        let _index_rebuilding_lock = self.index_rebuilding_lock.read().await;
-        let backend_cfs = cfs
-            .iter()
-            .flat_map(|cf| {
-                iter::once(&cf.datum_cf).chain(cf.indexes_cfs.iter().flat_map(|v| v.iter()))
-            })
-            .collect::<Vec<_>>();
-        let num_backend_cfs = backend_cfs.len();
-        self.backend
-            .transaction(&backend_cfs, move |_, transaction, backend_cfs| {
-                debug_assert!(num_backend_cfs == backend_cfs.len());
-                let mut backend_cfs = VecDeque::from(backend_cfs);
-                let mut frontend_cfs = Vec::with_capacity(CFS);
-                for cf in cfs {
-                    let datum_cf = backend_cfs.pop_front().unwrap();
-                    let mut indexes_cfs = Vec::with_capacity(cf.indexes_cfs.len());
-                    for i in cf.indexes_cfs.iter() {
-                        indexes_cfs.push(backend_cfs.drain(0..i.len()).collect());
-                    }
-                    frontend_cfs.push(TransactionCf {
-                        datum_cf,
-                        indexes_cfs,
-                    });
-                }
-                debug_assert!(backend_cfs.is_empty());
-                let Ok(frontend_cfs) = frontend_cfs.try_into() else {
-                    panic!("unexpected number of cfs");
-                };
-                actions(Transaction { transaction }, frontend_cfs)
-            })
-            .await
-    }
+    make_transaction_fn!(ro_transaction);
+    make_transaction_fn!(rw_transaction);
 }
 
 pub struct Cf<'db, B>

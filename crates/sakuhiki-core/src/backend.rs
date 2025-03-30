@@ -77,6 +77,24 @@ where
         'op: 'key;
 }
 
+macro_rules! make_transaction_fn {
+    ($name:ident) => {
+        fn $name<'fut, 'db, F, Ret>(
+            &'fut self,
+            cfs: &'fut [&'fut Self::Cf<'db>],
+            actions: F,
+        ) -> waaa::BoxFuture<'fut, Result<Ret, Self::Error>>
+        where
+            F: 'fut
+                + waaa::Send
+                + for<'t> FnOnce(
+                    &'t (),
+                    Self::Transaction<'t>,
+                    Vec<Self::TransactionCf<'t>>,
+                ) -> waaa::BoxFuture<'t, Ret>;
+    };
+}
+
 pub trait Backend: 'static {
     type Error: waaa::Send + waaa::Sync + std::error::Error;
 
@@ -92,19 +110,8 @@ pub trait Backend: 'static {
     type Transaction<'t>: waaa::Send + waaa::Sync + Transaction<'t, Self>;
     type TransactionCf<'t>: BackendCf;
 
-    fn transaction<'fut, 'db, F, Ret>(
-        &'fut self,
-        cfs: &'fut [&'fut Self::Cf<'db>],
-        actions: F,
-    ) -> waaa::BoxFuture<'fut, Result<Ret, Self::Error>>
-    where
-        F: 'fut
-            + waaa::Send
-            + for<'t> FnOnce(
-                &'t (),
-                Self::Transaction<'t>,
-                Vec<Self::TransactionCf<'t>>,
-            ) -> waaa::BoxFuture<'t, Ret>;
+    make_transaction_fn!(ro_transaction);
+    make_transaction_fn!(rw_transaction);
 }
 
 pub trait BackendCf: waaa::Send + waaa::Sync {
