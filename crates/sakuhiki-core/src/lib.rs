@@ -7,7 +7,7 @@ mod datum;
 pub use datum::{Datum, IndexedDatum};
 
 mod db;
-pub use db::{Db, Transaction};
+pub use db::{Db, DbBuilder, Transaction};
 
 mod errors;
 pub use errors::{CfError, IndexError};

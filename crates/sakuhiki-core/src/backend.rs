@@ -2,7 +2,7 @@ use std::ops::RangeBounds;
 
 use waaa::Future;
 
-use crate::CfError;
+use crate::{CfError, DbBuilder};
 
 pub trait Transaction<'t, B: ?Sized + Backend>
 where
@@ -102,7 +102,7 @@ pub trait Backend: 'static {
 
     type Builder: BackendBuilder<Target = Self>;
 
-    fn builder() -> Self::Builder;
+    fn builder() -> DbBuilder<Self::Builder>;
 
     type Cf<'db>: waaa::Send + waaa::Sync;
 

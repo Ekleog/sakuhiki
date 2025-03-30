@@ -66,10 +66,6 @@ impl<B> Db<B>
 where
     B: Backend,
 {
-    pub fn builder() -> DbBuilder<B::Builder> {
-        DbBuilder::new(B::builder())
-    }
-
     // This is unsafe because it can lead to data corruption if there's
     // another writer in parallel with the index rebuilding.
     pub async unsafe fn rebuild_index<I: Indexer<B>>(
@@ -121,7 +117,8 @@ impl<Builder> DbBuilder<Builder>
 where
     Builder: BackendBuilder,
 {
-    fn new(builder: Builder) -> Self {
+    // See Backend::builder()
+    pub fn new(builder: Builder) -> Self {
         Self {
             builder,
             cf_builder_list: Vec::new(),
@@ -154,10 +151,16 @@ where
         self
     }
 
+    // Note: while a new index is building, no new data should be added!
+    // This is especially important for eg. tikv that could have multiple concurrent clients.
+    // TODO(med): figure out a way to lock writes while indexes are rebuilding
+    // (eg. get_for_update exclusive=false on a metadata cf and exclusive=true when rebuilding the index)
     pub async fn build(
         self,
-    ) -> Result<Builder::Target, CfError<<Builder::Target as Backend>::Error>> {
-        self.builder.build(self.cf_builder_list).await
+    ) -> Result<Db<Builder::Target>, CfError<<Builder::Target as Backend>::Error>> {
+        Ok(Db {
+            backend: self.builder.build(self.cf_builder_list).await?,
+        })
     }
 }
 

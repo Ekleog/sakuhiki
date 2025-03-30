@@ -70,7 +70,11 @@ async fn test_index() {
     backend.create_cf("datum");
     backend.create_cf("datum-foo");
     backend.create_cf("datum-bar");
-    let db = sakuhiki_core::Db::new(backend);
+    let db = sakuhiki_memdb::MemDb::builder()
+        .datum::<Datum>()
+        .build()
+        .await
+        .unwrap();
     let datum = db.cf_handle::<Datum>().await.unwrap();
     db.rw_transaction(&[&datum], |t, [mut datum]| {
         Box::pin(async move {

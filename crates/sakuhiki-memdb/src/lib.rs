@@ -8,7 +8,7 @@ use std::{
 use async_lock::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use futures_util::stream;
 use sakuhiki_core::{
-    CfError,
+    CfError, DbBuilder,
     backend::{BackendBuilder, BackendCf},
 };
 
@@ -60,8 +60,8 @@ impl sakuhiki_core::Backend for MemDb {
 
     type Builder = MemDbBuilder;
 
-    fn builder() -> MemDbBuilder {
-        MemDbBuilder::new()
+    fn builder() -> DbBuilder<MemDbBuilder> {
+        DbBuilder::new(MemDbBuilder::new())
     }
 
     type Cf<'db> = &'static str;
