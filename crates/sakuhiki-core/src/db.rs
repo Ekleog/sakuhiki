@@ -26,7 +26,7 @@ where
         _index: &I,
     ) -> Result<(), IndexError<B, I::Datum>> {
         // Note: NEED TO BLOCK PUTS WHILE THE TRANSACTION IS IN PROGRESS
-        todo!() // TODO(med): implement index rebuilding
+        todo!() // TODO(high): implement index rebuilding
     }
 
     pub async fn cf_handle<D>(&self) -> Result<Cf<'_, B>, CfError<B::Error>>
