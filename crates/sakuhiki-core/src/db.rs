@@ -1,7 +1,6 @@
 use std::{collections::VecDeque, iter, ops::RangeBounds};
 // TODO(blocked): use AsyncFn everywhere possible, once its return future can be marked Send/Sync
 
-use async_lock::RwLock;
 use futures_util::{StreamExt as _, TryStreamExt as _, stream};
 use waaa::Stream;
 
@@ -12,7 +11,6 @@ use crate::{
 
 pub struct Db<B> {
     backend: B,
-    index_rebuilding_lock: RwLock<()>,
 }
 
 macro_rules! make_transaction_fn {
@@ -30,7 +28,6 @@ macro_rules! make_transaction_fn {
                     [TransactionCf<'t, B>; CFS],
                 ) -> waaa::BoxFuture<'t, Ret>,
         {
-            let _index_rebuilding_lock = self.index_rebuilding_lock.read().await;
             let backend_cfs = cfs
                 .iter()
                 .flat_map(|cf| {
@@ -70,17 +67,15 @@ where
     B: Backend,
 {
     pub fn new(backend: B) -> Self {
-        Self {
-            backend,
-            index_rebuilding_lock: RwLock::new(()),
-        }
+        Self { backend }
     }
 
-    pub async fn rebuild_index<I: Indexer<B>>(
+    // This is unsafe because it can lead to data corruption if there's
+    // another writer in parallel with the index rebuilding.
+    pub async unsafe fn rebuild_index<I: Indexer<B>>(
         &self,
         _index: &I,
     ) -> Result<(), IndexError<B, I::Datum>> {
-        let _index_rebuilding_lock = self.index_rebuilding_lock.write().await;
         todo!() // TODO(high): implement index rebuilding
     }
 
