@@ -2,6 +2,7 @@ use futures_util::StreamExt as _;
 use sakuhiki_core::{
     Backend, CfError, Datum, Index, IndexError, Indexer,
     backend::{BackendCf as _, Transaction as _},
+    indexer,
 };
 
 use crate::{BTreeQuery, Key, query::Query};
@@ -129,6 +130,17 @@ where
                     .map_err(|e| IndexError::Backend(CfError::new(cfs[0].name(), e)))?;
             }
             Ok(())
+        })
+    }
+
+    fn rebuild<'fut, 't>(
+        &'fut self,
+        transaction: &'fut B::Transaction<'t>,
+        index_cfs: &'fut [B::TransactionCf<'t>],
+        datum_cf: &'fut B::TransactionCf<'t>,
+    ) -> waaa::BoxFuture<'fut, Result<(), IndexError<B::Error, anyhow::Error>>> {
+        Box::pin(async move {
+            indexer::default_rebuild::<B, Self>(self, transaction, index_cfs, datum_cf).await
         })
     }
 }

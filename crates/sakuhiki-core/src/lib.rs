@@ -15,5 +15,5 @@ pub use errors::{CfError, IndexError};
 mod index;
 pub use index::Index;
 
-mod indexer;
+pub mod indexer;
 pub use indexer::Indexer;
