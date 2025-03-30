@@ -43,8 +43,9 @@ where
     }
 
     fn extract_key(&self, datum: &D, key: &mut Vec<u8>) -> bool {
-        key.resize(self.len, 0);
-        (self.extractor)(datum, &mut key[..])
+        let len = key.len();
+        key.resize(len + self.len, 0);
+        (self.extractor)(datum, &mut key[len..])
     }
 
     fn len_hint_from_slice(&self, _: &[u8]) -> Result<usize, D::Error> {
@@ -52,12 +53,13 @@ where
     }
 
     fn extract_key_from_slice(&self, slice: &[u8], key: &mut Vec<u8>) -> Result<bool, D::Error> {
-        key.resize(self.len, 0);
+        let len = key.len();
+        key.resize(len + self.len, 0);
         if let Some(extractor_from_slice) = self.extractor_from_slice {
-            (extractor_from_slice)(slice, &mut key[..])
+            (extractor_from_slice)(slice, &mut key[len..])
         } else {
             let datum = D::from_slice(slice)?;
-            Ok((self.extractor)(&datum, &mut key[..]))
+            Ok((self.extractor)(&datum, &mut key[len..]))
         }
     }
 
