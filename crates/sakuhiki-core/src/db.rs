@@ -5,7 +5,7 @@ use futures_util::{StreamExt as _, TryStreamExt as _, stream};
 use waaa::Stream;
 
 use crate::{
-    Backend, CfError, IndexError, IndexedDatum, Indexer,
+    Backend, CfError, Datum as _, IndexError, IndexedDatum, Indexer,
     backend::{BackendBuilder, BackendCf as _, CfBuilder, Transaction as _},
 };
 
@@ -19,7 +19,7 @@ macro_rules! make_transaction_fn {
             &'fut self,
             cfs: &'fut [&'fut Cf<'fut, B>; CFS],
             actions: F,
-        ) -> Result<Ret, B::Error>
+        ) -> Result<Ret, CfError<B::Error>>
         where
             F: 'fut
                 + waaa::Send
@@ -70,9 +70,32 @@ where
     // another writer in parallel with the index rebuilding.
     pub async unsafe fn rebuild_index<I: Indexer<B>>(
         &self,
-        _index: &I,
-    ) -> Result<(), IndexError<B, I::Datum>> {
-        todo!() // TODO(high): implement index rebuilding
+        index: &'static I,
+    ) -> Result<(), IndexError<B::Error, anyhow::Error>> {
+        let mut all_cfs = stream::iter(index.cfs())
+            .then(|cf| async move {
+                self.backend
+                    .cf_handle(cf)
+                    .await
+                    .map_err(|e| IndexError::Backend(CfError::new(cf, e)))
+            })
+            .try_collect::<Vec<_>>()
+            .await?;
+        all_cfs.push(
+            self.backend
+                .cf_handle(I::Datum::CF)
+                .await
+                .map_err(|e| IndexError::Backend(CfError::new(I::Datum::CF, e)))?,
+        );
+        let all_cfs = all_cfs.iter().collect::<Vec<_>>();
+        self.backend
+            .rw_transaction(&all_cfs, move |_, t, mut cfs| {
+                let datum_cf = cfs.pop().unwrap();
+                let index_cfs = cfs;
+                Box::pin(async move { index.rebuild(&t, &index_cfs, &datum_cf).await })
+            })
+            .await
+            .map_err(|e| IndexError::Backend(e))?
     }
 
     pub async fn cf_handle<D>(&self) -> Result<Cf<'_, B>, CfError<B::Error>>
@@ -84,7 +107,7 @@ where
                 .backend
                 .cf_handle(D::CF)
                 .await
-                .map_err(|error| CfError { cf: D::CF, error })?,
+                .map_err(|e| CfError::new(D::CF, e))?,
             indexes_cfs: stream::iter(D::INDEXES)
                 .then(|i| {
                     stream::iter(i.cfs())

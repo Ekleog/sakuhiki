@@ -2,7 +2,7 @@ use std::ops::RangeBounds;
 
 use waaa::Future;
 
-use crate::{DbBuilder, IndexError};
+use crate::{CfError, DbBuilder, IndexError};
 
 pub trait Transaction<'t, B: ?Sized + Backend>
 where
@@ -90,7 +90,7 @@ macro_rules! make_transaction_fn {
             &'fut self,
             cfs: &'fut [&'fut Self::Cf<'db>],
             actions: F,
-        ) -> waaa::BoxFuture<'fut, Result<Ret, Self::Error>>
+        ) -> waaa::BoxFuture<'fut, Result<Ret, CfError<Self::Error>>>
         where
             F: 'fut
                 + waaa::Send

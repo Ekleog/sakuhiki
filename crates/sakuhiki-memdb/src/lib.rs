@@ -8,7 +8,7 @@ use std::{
 use async_lock::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use futures_util::{StreamExt as _, stream};
 use sakuhiki_core::{
-    DbBuilder, IndexError,
+    CfError, DbBuilder, IndexError,
     backend::{BackendBuilder, BackendCf, CfBuilder},
 };
 
@@ -60,7 +60,7 @@ impl sakuhiki_core::Backend for MemDb {
         &'fut self,
         cfs: &'fut [&'fut Self::Cf<'db>],
         actions: F,
-    ) -> waaa::BoxFuture<'fut, Result<Ret, Self::Error>>
+    ) -> waaa::BoxFuture<'fut, Result<Ret, CfError<Self::Error>>>
     where
         F: 'fut
             + waaa::Send
@@ -72,7 +72,10 @@ impl sakuhiki_core::Backend for MemDb {
             cfs.sort_by_key(|e| e.1);
             let mut transaction_cfs = Vec::with_capacity(cfs.len());
             for (i, &name) in cfs {
-                let cf = self.db.get(*name).ok_or(Error::NonExistentColumnFamily)?;
+                let cf = self
+                    .db
+                    .get(*name)
+                    .ok_or_else(|| CfError::new(name, Error::NonExistentColumnFamily))?;
                 let cf = Mutex::new(cf.lock().await);
                 transaction_cfs.push((i, TransactionCf { name, cf }));
             }
@@ -89,7 +92,7 @@ impl sakuhiki_core::Backend for MemDb {
         &'fut self,
         cfs: &'fut [&'fut Self::Cf<'db>],
         actions: F,
-    ) -> waaa::BoxFuture<'fut, Result<Ret, Self::Error>>
+    ) -> waaa::BoxFuture<'fut, Result<Ret, CfError<Self::Error>>>
     where
         F: 'fut
             + waaa::Send
