@@ -121,7 +121,6 @@ where
     B: Backend,
 {
     datum_cf: B::TransactionCf<'t>,
-    #[allow(dead_code)] // TODO(high): will become used for Ro once queries are done
     indexes_cfs: Vec<Vec<B::TransactionCf<'t>>>,
 }
 
