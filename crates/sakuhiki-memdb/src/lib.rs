@@ -1,15 +1,15 @@
 use std::{
     collections::BTreeMap,
-    future::{Ready, ready},
+    future::{self, Ready, ready},
     ops::{Bound, RangeBounds},
     sync::Mutex,
 };
 
 use async_lock::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
-use futures_util::{StreamExt as _, stream};
+use futures_util::stream;
 use sakuhiki_core::{
-    CfError, DbBuilder, IndexError,
-    backend::{BackendBuilder, BackendCf, CfBuilder},
+    Backend, CfError, Datum, Db, IndexError,
+    backend::{BackendBuilder, BackendCf},
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -35,15 +35,29 @@ pub struct MemDb {
     db: BTreeMap<String, AsyncMutex<ColumnFamily>>,
 }
 
+impl MemDb {
+    pub fn new() -> MemDb {
+        MemDb {
+            db: BTreeMap::new(),
+        }
+    }
+
+    pub fn builder() -> MemDbBuilder {
+        MemDbBuilder::new()
+    }
+}
+
+impl Default for MemDb {
+    fn default() -> MemDb {
+        MemDb::new()
+    }
+}
+
 #[warn(clippy::missing_trait_methods)]
-impl sakuhiki_core::Backend for MemDb {
+impl Backend for MemDb {
     type Error = Error;
 
     type Builder = MemDbBuilder;
-
-    fn builder() -> DbBuilder<MemDbBuilder> {
-        DbBuilder::new(MemDbBuilder::new())
-    }
 
     type Cf<'db> = &'static str;
 
@@ -182,66 +196,91 @@ impl<'t> sakuhiki_core::backend::Transaction<'t, MemDb> for Transaction {
 
     fn clear<'op>(
         &'op self,
-        cf: &'op <MemDb as sakuhiki_core::Backend>::TransactionCf<'t>,
-    ) -> waaa::BoxFuture<'op, Result<(), <MemDb as sakuhiki_core::Backend>::Error>> {
+        cf: &'op <MemDb as Backend>::TransactionCf<'t>,
+    ) -> waaa::BoxFuture<'op, Result<(), <MemDb as Backend>::Error>> {
         cf.cf.lock().unwrap().clear();
         Box::pin(ready(Ok(())))
     }
 }
 
-pub struct MemDbBuilder {}
+pub struct MemDbBuilder {
+    db: MemDb,
+}
 
 impl MemDbBuilder {
-    fn new() -> MemDbBuilder {
-        MemDbBuilder {}
+    pub fn new() -> MemDbBuilder {
+        MemDbBuilder { db: MemDb::new() }
+    }
+}
+
+impl Default for MemDbBuilder {
+    fn default() -> MemDbBuilder {
+        MemDbBuilder::new()
     }
 }
 
 impl BackendBuilder for MemDbBuilder {
     type Target = MemDb;
 
-    type BuildFuture =
-        waaa::BoxFuture<'static, Result<Self::Target, IndexError<Error, anyhow::Error>>>;
+    fn build_datum_cf(
+        mut self,
+        cf: &'static str,
+    ) -> waaa::BoxFuture<'static, Result<Self, <Self::Target as Backend>::Error>> {
+        self.db
+            .db
+            .insert(cf.to_string(), AsyncMutex::new(ColumnFamily::new()));
+        Box::pin(future::ready(Ok(self)))
+    }
 
-    fn build(
-        self,
-        cf_builder_list: Vec<CfBuilder<Self::Target>>,
-        _drop_unknown_cfs: bool, // Never relevant, as we're always starting from scratch
-    ) -> Self::BuildFuture {
+    fn build_index_cf<I: ?Sized + sakuhiki_core::Indexer<Self::Target>>(
+        mut self,
+        index: &I,
+    ) -> waaa::BoxFuture<
+        '_,
+        Result<Self, IndexError<<Self::Target as Backend>::Error, <I::Datum as Datum>::Error>>,
+    > {
+        let index_cf_names = index.cfs();
+        if self.db.db.contains_key(index_cf_names[0]) {
+            assert!(index_cf_names.iter().all(|cf| self.db.db.contains_key(*cf))); // TODO(med): will be interesting to make this wrong for comparative fuzz-testing
+            return Box::pin(future::ready(Ok(self)));
+        }
+        for cf in index_cf_names {
+            self.db
+                .db
+                .insert(cf.to_string(), AsyncMutex::new(ColumnFamily::new()));
+        }
+
+        let datum_cf_name = <I::Datum as Datum>::CF;
+
         Box::pin(async move {
-            let mut res = MemDb {
-                db: BTreeMap::new(),
-            };
-
-            for b in cf_builder_list {
-                if b.cfs.is_empty() || res.db.contains_key(b.cfs[0]) {
-                    assert!(b.cfs.iter().all(|cf| res.db.contains_key(*cf)));
-                    continue;
-                }
-
-                for cf in b.cfs.iter() {
-                    res.db
-                        .insert(cf.to_string(), AsyncMutex::new(ColumnFamily::new()));
-                }
-
-                let cfs = stream::iter(b.cfs.iter())
-                    .then(async |cf| TransactionCf {
+            {
+                let mut index_cfs = Vec::with_capacity(index_cf_names.len());
+                for cf in index_cf_names {
+                    index_cfs.push(TransactionCf {
                         name: cf,
-                        cf: Mutex::new(res.db.get(*cf).unwrap().lock().await),
-                    })
-                    .collect()
-                    .await;
-                let builds_using = match b.builds_using {
-                    None => None,
-                    Some(cf) => Some(TransactionCf {
-                        name: cf,
-                        cf: Mutex::new(res.db.get(cf).unwrap().lock().await),
-                    }),
+                        cf: Mutex::new(self.db.db.get(*cf).unwrap().lock().await),
+                    });
+                }
+                let datum_cf = TransactionCf {
+                    name: datum_cf_name,
+                    cf: Mutex::new(self.db.db.get(datum_cf_name).unwrap().lock().await),
                 };
-                (b.builder)(&(), Transaction { _private: () }, cfs, builds_using).await?;
+                index
+                    .rebuild(&Transaction { _private: () }, &index_cfs, &datum_cf)
+                    .await?;
             }
-
-            Ok(res)
+            Ok(self)
         })
+    }
+
+    fn drop_unknown_cfs(self) -> waaa::BoxFuture<'static, Result<MemDbBuilder, Error>> {
+        todo!() // TODO(med): not implemented in memdb yet, will be useful for comparative fuzz-testing later
+    }
+
+    type BuildFuture =
+        waaa::BoxFuture<'static, Result<Db<Self::Target>, IndexError<Error, anyhow::Error>>>;
+
+    fn build(self) -> Self::BuildFuture {
+        Box::pin(future::ready(Ok(Db::new(self.db))))
     }
 }

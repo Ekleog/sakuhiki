@@ -1,6 +1,6 @@
 use std::io;
 
-use sakuhiki_core::{Backend, Datum as _, Indexer};
+use sakuhiki_core::{Backend, BackendBuilder as _, Datum as _, Indexer};
 
 use crate::*;
 
@@ -74,6 +74,8 @@ impl<B: Backend> sakuhiki_core::IndexedDatum<B> for Datum {
 async fn test_index() {
     let db = sakuhiki_memdb::MemDb::builder()
         .datum::<Datum>()
+        .await
+        .unwrap()
         .build()
         .await
         .unwrap();

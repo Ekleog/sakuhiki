@@ -60,12 +60,14 @@ pub trait Indexer<B: Backend>: Send + Sync {
         })
     }
 
+    #[allow(clippy::type_complexity)]
     fn rebuild<'fut, 't>(
         &'fut self,
         transaction: &'fut B::Transaction<'t>,
         index_cfs: &'fut [B::TransactionCf<'t>],
         datum_cf: &'fut B::TransactionCf<'t>,
-    ) -> waaa::BoxFuture<'fut, Result<(), IndexError<B::Error, anyhow::Error>>> {
+    ) -> waaa::BoxFuture<'fut, Result<(), IndexError<B::Error, <Self::Datum as Datum>::Error>>>
+    {
         Box::pin(async move { default_rebuild(self, transaction, index_cfs, datum_cf).await })
     }
 }
@@ -75,7 +77,7 @@ pub async fn default_rebuild<'fut, 't, B, I>(
     transaction: &'fut B::Transaction<'t>,
     index_cfs: &'fut [B::TransactionCf<'t>],
     datum_cf: &'fut B::TransactionCf<'t>,
-) -> Result<(), IndexError<B::Error, anyhow::Error>>
+) -> Result<(), IndexError<B::Error, <I::Datum as Datum>::Error>>
 where
     B: Backend,
     I: ?Sized + Indexer<B>,
@@ -90,14 +92,7 @@ where
     while let Some(d) = all_data.next().await {
         let (key, datum) = d.map_err(|e| IndexError::Backend(CfError::new(datum_cf.name(), e)))?;
         this.index_from_slice(key.as_ref(), datum.as_ref(), transaction, index_cfs)
-            .await
-            .map_err(|e| match e {
-                IndexError::Backend(e) => IndexError::Backend(e),
-                IndexError::Parsing(e) => IndexError::Parsing(
-                    anyhow::Error::from(e)
-                        .context(format!("parsing data from cf '{}'", datum_cf.name())),
-                ),
-            })?;
+            .await?;
     }
     Ok(())
 }

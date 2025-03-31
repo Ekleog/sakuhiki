@@ -1,12 +1,12 @@
-use std::{collections::VecDeque, future, iter, ops::RangeBounds};
+use std::{collections::VecDeque, iter, ops::RangeBounds};
 // TODO(blocked): use AsyncFn everywhere possible, once its return future can be marked Send/Sync
 
 use futures_util::{StreamExt as _, TryStreamExt as _, stream};
 use waaa::Stream;
 
 use crate::{
-    Backend, CfError, Datum as _, IndexError, IndexedDatum, Indexer,
-    backend::{BackendBuilder, BackendCf as _, CfBuilder, Transaction as _},
+    Backend, CfError, Datum, IndexError, IndexedDatum, Indexer,
+    backend::{BackendCf as _, Transaction as _},
 };
 
 pub struct Db<B> {
@@ -66,6 +66,10 @@ impl<B> Db<B>
 where
     B: Backend,
 {
+    pub fn new(backend: B) -> Db<B> {
+        Db { backend }
+    }
+
     /// Rebuild an index from scratch.
     ///
     /// This can help recover from data corruption.
@@ -74,10 +78,11 @@ where
     ///
     /// This is unsafe because it can lead to data corruption if there's
     /// another writer in parallel with the index rebuilding.
+    // TODO(high): figure out a way to lock writes while indexes are rebuilding
     pub async unsafe fn rebuild_index<I: Indexer<B>>(
         &self,
         index: &'static I,
-    ) -> Result<(), IndexError<B::Error, anyhow::Error>> {
+    ) -> Result<(), IndexError<B::Error, <I::Datum as Datum>::Error>> {
         let mut all_cfs = stream::iter(index.cfs())
             .then(|cf| async move {
                 self.backend
@@ -132,74 +137,6 @@ where
 
     make_transaction_fn!(ro_transaction);
     make_transaction_fn!(rw_transaction);
-}
-
-pub struct DbBuilder<Builder>
-where
-    Builder: BackendBuilder,
-{
-    builder: Builder,
-    cf_builder_list: Vec<CfBuilder<<Builder as BackendBuilder>::Target>>,
-    drop_unknown_cfs: bool,
-}
-
-impl<Builder> DbBuilder<Builder>
-where
-    Builder: BackendBuilder,
-{
-    // See Backend::builder()
-    pub fn new(builder: Builder) -> Self {
-        Self {
-            builder,
-            cf_builder_list: Vec::new(),
-            drop_unknown_cfs: false,
-        }
-    }
-
-    pub fn config(mut self, f: impl FnOnce(&mut Builder)) -> Self {
-        f(&mut self.builder);
-        self
-    }
-
-    pub fn datum<D: IndexedDatum<Builder::Target>>(mut self) -> Self {
-        self.cf_builder_list.push(CfBuilder {
-            cfs: vec![D::CF],
-            builds_using: None,
-            builder: Box::new(|_, _, _, _| Box::pin(future::ready(Ok(())))),
-        });
-        for index in D::INDEXES {
-            self.cf_builder_list.push(CfBuilder {
-                cfs: index.cfs().to_owned(),
-                builds_using: Some(D::CF),
-                builder: Box::new(move |_, t, index_cfs, datum_cf| {
-                    let datum_cf = datum_cf.unwrap();
-                    Box::pin(async move { index.rebuild(&t, &index_cfs, &datum_cf).await })
-                }),
-            })
-        }
-        self
-    }
-
-    pub fn drop_unknown_cfs(mut self, drop_unknown_cfs: bool) -> Self {
-        self.drop_unknown_cfs = drop_unknown_cfs;
-        self
-    }
-
-    // Note: while a new index is building, no new data should be added!
-    // This is especially important for eg. tikv that could have multiple concurrent clients.
-    // TODO(med): figure out a way to lock writes while indexes are rebuilding
-    // (eg. get_for_update exclusive=false on a metadata cf and exclusive=true when rebuilding the index)
-    pub async fn build(
-        self,
-    ) -> Result<Db<Builder::Target>, IndexError<<Builder::Target as Backend>::Error, anyhow::Error>>
-    {
-        Ok(Db {
-            backend: self
-                .builder
-                .build(self.cf_builder_list, self.drop_unknown_cfs)
-                .await?,
-        })
-    }
 }
 
 pub struct Cf<'db, B>

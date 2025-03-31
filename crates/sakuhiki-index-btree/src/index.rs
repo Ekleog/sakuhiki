@@ -138,7 +138,8 @@ where
         transaction: &'fut B::Transaction<'t>,
         index_cfs: &'fut [B::TransactionCf<'t>],
         datum_cf: &'fut B::TransactionCf<'t>,
-    ) -> waaa::BoxFuture<'fut, Result<(), IndexError<B::Error, anyhow::Error>>> {
+    ) -> waaa::BoxFuture<'fut, Result<(), IndexError<B::Error, <Self::Datum as Datum>::Error>>>
+    {
         Box::pin(async move {
             indexer::default_rebuild::<B, Self>(self, transaction, index_cfs, datum_cf).await
         })

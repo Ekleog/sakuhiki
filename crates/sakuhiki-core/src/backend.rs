@@ -1,8 +1,9 @@
 use std::ops::RangeBounds;
 
+use futures_util::{TryStreamExt as _, stream};
 use waaa::Future;
 
-use crate::{CfError, DbBuilder, IndexError};
+use crate::{CfError, Datum, Db, IndexError, IndexedDatum, Indexer};
 
 pub trait Transaction<'t, B: ?Sized + Backend>
 where
@@ -108,8 +109,6 @@ pub trait Backend: 'static {
 
     type Builder: BackendBuilder<Target = Self>;
 
-    fn builder() -> DbBuilder<Self::Builder>;
-
     type Cf<'db>: waaa::Send + waaa::Sync;
 
     type CfHandleFuture<'db>: waaa::Send + Future<Output = Result<Self::Cf<'db>, Self::Error>>;
@@ -130,39 +129,60 @@ pub trait BackendCf: waaa::Send + waaa::Sync {
     fn name(&self) -> &'static str;
 }
 
-pub struct CfBuilder<B>
-where
-    B: Backend,
-{
-    pub cfs: Vec<&'static str>,
-    pub builds_using: Option<&'static str>,
-    #[allow(clippy::type_complexity)]
-    pub builder: Box<
-        dyn Send
-            + for<'t> FnOnce(
-                &'t (),
-                B::Transaction<'t>,
-                Vec<B::TransactionCf<'t>>,
-                Option<B::TransactionCf<'t>>,
-            )
-                -> waaa::BoxFuture<'t, Result<(), IndexError<B::Error, anyhow::Error>>>,
-    >,
-}
-
-pub trait BackendBuilder {
+pub trait BackendBuilder: 'static + Sized + Send {
     type Target: Backend;
+
+    #[allow(clippy::type_complexity)]
+    fn datum<D: IndexedDatum<Self::Target>>(
+        self,
+    ) -> waaa::BoxFuture<
+        'static,
+        Result<Self, IndexError<<Self::Target as Backend>::Error, anyhow::Error>>,
+    > {
+        Box::pin(async move {
+            let this = self
+                .build_datum_cf(D::CF)
+                .await
+                .map_err(|e| IndexError::Backend(CfError::new(D::CF, e)))?;
+            stream::iter(D::INDEXES.iter().map(Ok))
+                .try_fold(this, |this, i| async move {
+                    this.build_index_cf(*i).await.map_err(|e| match e {
+                        IndexError::Backend(e) => IndexError::Backend(e),
+                        IndexError::Parsing(e) => IndexError::Parsing(
+                            anyhow::Error::from(e)
+                                .context(format!("building index cfs '{:?}'", i.cfs())),
+                        ),
+                    })
+                })
+                .await
+        })
+    }
+
+    fn build_datum_cf(
+        self,
+        cf: &'static str,
+    ) -> waaa::BoxFuture<'static, Result<Self, <Self::Target as Backend>::Error>>;
+
+    #[allow(clippy::type_complexity)]
+    fn build_index_cf<I: ?Sized + Indexer<Self::Target>>(
+        self,
+        index: &I,
+    ) -> waaa::BoxFuture<
+        '_,
+        Result<Self, IndexError<<Self::Target as Backend>::Error, <I::Datum as Datum>::Error>>,
+    >;
+
+    fn drop_unknown_cfs(
+        self,
+    ) -> waaa::BoxFuture<'static, Result<Self, <Self::Target as Backend>::Error>>;
 
     type BuildFuture: waaa::Send
         + Future<
             Output = Result<
-                Self::Target,
+                Db<Self::Target>,
                 IndexError<<Self::Target as Backend>::Error, anyhow::Error>,
             >,
         >;
 
-    fn build(
-        self,
-        cf_builder_list: Vec<CfBuilder<Self::Target>>,
-        drop_unknown_cfs: bool,
-    ) -> Self::BuildFuture;
+    fn build(self) -> Self::BuildFuture;
 }
