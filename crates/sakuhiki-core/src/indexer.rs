@@ -82,6 +82,18 @@ where
     B: Backend,
     I: ?Sized + Indexer<B>,
 {
+    // Dark magic to work around https://github.com/rust-lang/rust/issues/100013
+    // See https://github.com/rust-lang/rust/issues/100013#issuecomment-2210995259 for the inspiration
+    // This should be removed someday when rustc gets fixed
+    fn assert_send<T: Send>(v: T) -> impl Send {
+        v
+    }
+    let _lock = assert_send(
+        transaction
+            .take_exclusive_lock(datum_cf)
+            .await
+            .map_err(|e| IndexError::Backend(CfError::new(datum_cf.name(), e)))?,
+    );
     for cf in index_cfs {
         transaction
             .clear(cf)

@@ -10,6 +10,17 @@ where
     Self: 't,
     B: 't,
 {
+    type ExclusiveLock<'op>: Send
+    where
+        't: 'op;
+
+    fn take_exclusive_lock<'op>(
+        &'op self,
+        cf: &'op B::TransactionCf<'t>,
+    ) -> waaa::BoxFuture<'op, Result<Self::ExclusiveLock<'op>, B::Error>>
+    where
+        't: 'op;
+
     fn get<'op, 'key>(
         &'op self,
         cf: &'op B::TransactionCf<'t>,
@@ -113,6 +124,7 @@ pub trait Backend: 'static {
 
     type CfHandleFuture<'db>: waaa::Send + Future<Output = Result<Self::Cf<'db>, Self::Error>>;
 
+    // Note: CF handles starting with `__sakuhiki` are reserved for implementation details.
     fn cf_handle<'db>(&'db self, name: &'static str) -> Self::CfHandleFuture<'db>;
 
     type Transaction<'t>: waaa::Send + waaa::Sync + Transaction<'t, Self>;

@@ -73,13 +73,7 @@ where
     /// Rebuild an index from scratch.
     ///
     /// This can help recover from data corruption.
-    ///
-    /// # Safety
-    ///
-    /// This is unsafe because it can lead to data corruption if there's
-    /// another writer in parallel with the index rebuilding.
-    // TODO(high): figure out a way to lock writes while indexes are rebuilding
-    pub async unsafe fn rebuild_index<I: Indexer<B>>(
+    pub async fn rebuild_index<I: Indexer<B>>(
         &self,
         index: &'static I,
     ) -> Result<(), IndexError<B::Error, <I::Datum as Datum>::Error>> {

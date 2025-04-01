@@ -129,6 +129,22 @@ pub struct Transaction {
 
 // #[warn(clippy::missing_trait_methods)] // MemDb is used only for tests, we can use default impls
 impl<'t> sakuhiki_core::backend::Transaction<'t, MemDb> for Transaction {
+    type ExclusiveLock<'op>
+        = ()
+    where
+        't: 'op;
+
+    fn take_exclusive_lock<'op>(
+        &'op self,
+        _cf: &'op <MemDb as Backend>::TransactionCf<'t>,
+    ) -> waaa::BoxFuture<'op, Result<Self::ExclusiveLock<'op>, <MemDb as Backend>::Error>>
+    where
+        't: 'op,
+    {
+        // MemDb already locks literally all the CFs when starting the transaction anyway
+        Box::pin(future::ready(Ok(())))
+    }
+
     fn get<'op, 'key>(
         &'op self,
         cf: &'op TransactionCf<'t>,
