@@ -1,6 +1,6 @@
 use std::{future::Ready, path::Path};
 
-use sakuhiki_core::{Backend, CfError};
+use sakuhiki_core::{Backend, CfError, backend::Builder};
 
 use crate::{Error, RocksDbBuilder, Transaction, TransactionCf};
 
@@ -9,8 +9,8 @@ pub struct RocksDb {
 }
 
 impl RocksDb {
-    pub fn builder<P: AsRef<Path>>(path: P) -> RocksDbBuilder {
-        RocksDbBuilder::new(path)
+    pub fn builder<P: AsRef<Path>>(path: P) -> Builder<RocksDb> {
+        Builder::new(RocksDbBuilder::new(path))
     }
 }
 

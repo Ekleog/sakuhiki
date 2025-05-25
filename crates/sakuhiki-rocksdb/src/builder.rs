@@ -17,7 +17,7 @@ pub struct RocksDbBuilder {
 }
 
 impl RocksDbBuilder {
-    pub fn new<P: AsRef<Path>>(path: P) -> Self {
+    pub(crate) fn new<P: AsRef<Path>>(path: P) -> Self {
         RocksDbBuilder {
             path: path.as_ref().to_owned(),
             global_opts: None,
