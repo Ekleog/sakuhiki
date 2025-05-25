@@ -41,7 +41,14 @@ impl RocksDb {
                 Vec<TransactionCf<'t>>,
             ) -> waaa::BoxFuture<'t, Ret>,
     {
-        todo!() // TODO(high)
+        Box::pin(async move {
+            let t = self
+                .start_transaction(rw)
+                .await
+                .map_err(|err| CfError::new("", err))?; // TODO(high): should be MaybeCfError
+            let cfs = cfs.iter().map(|cf| (**cf).clone()).collect();
+            Ok((actions)(&(), t, cfs).await)
+        })
     }
 }
 

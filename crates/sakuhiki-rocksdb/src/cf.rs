@@ -1,6 +1,7 @@
 use rocksdb::ColumnFamily;
 use sakuhiki_core::backend::BackendCf;
 
+#[derive(Clone)]
 pub struct TransactionCf<'t> {
     cf: &'t ColumnFamily,
     name: &'static str,
