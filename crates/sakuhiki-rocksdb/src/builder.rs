@@ -4,16 +4,16 @@ use std::{
 };
 
 use sakuhiki_core::{Backend, BackendBuilder, Datum, Db, IndexError};
-use tokio::task::spawn_blocking;
 
-use crate::{Error, ErrorWhile, RocksDb};
+use crate::{Error, RocksDb};
 
 pub struct RocksDbBuilder {
     path: PathBuf,
     global_opts: Option<rocksdb::Options>,
     txn_db_opts: Option<rocksdb::TransactionDBOptions>,
     configured_cf_opts: HashMap<&'static str, rocksdb::Options>,
-    built_cf_opts: HashMap<&'static str, rocksdb::Options>,
+    require_all_cfs_configured: bool,
+    needed_cf_opts: HashMap<&'static str, rocksdb::Options>,
 }
 
 impl RocksDbBuilder {
@@ -23,7 +23,8 @@ impl RocksDbBuilder {
             global_opts: None,
             txn_db_opts: None,
             configured_cf_opts: HashMap::new(),
-            built_cf_opts: HashMap::new(),
+            require_all_cfs_configured: false,
+            needed_cf_opts: HashMap::new(),
         }
     }
 
@@ -52,6 +53,11 @@ impl RocksDbBuilder {
         }
         self
     }
+
+    pub fn require_all_cfs_configured(mut self) -> Self {
+        self.require_all_cfs_configured = true;
+        self
+    }
 }
 
 impl BackendBuilder for RocksDbBuilder {
@@ -61,8 +67,22 @@ impl BackendBuilder for RocksDbBuilder {
         mut self,
         cf: &'static str,
     ) -> waaa::BoxFuture<'static, Result<Self, <Self::Target as Backend>::Error>> {
+        // TODO(high): this should probably be a non-async fn, pushing all async work back to `build`
         Box::pin(async move {
-            todo!() // TODO(high)
+            let opts = self.configured_cf_opts.remove(cf);
+            match opts {
+                None => {
+                    if self.require_all_cfs_configured {
+                        panic!("Datum '{cf}' is not configured, but all CFs must be configured");
+                    } else {
+                        self.needed_cf_opts.insert(cf, rocksdb::Options::default());
+                    }
+                }
+                Some(opts) => {
+                    self.needed_cf_opts.insert(cf, opts);
+                }
+            }
+            Ok(self)
         })
     }
 
