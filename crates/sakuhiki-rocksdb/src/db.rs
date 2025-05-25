@@ -12,6 +12,10 @@ impl RocksDb {
     pub fn builder<P: AsRef<Path>>(path: P) -> Builder<RocksDb> {
         Builder::new(RocksDbBuilder::new(path))
     }
+
+    pub(crate) fn new(db: rocksdb::TransactionDB<rocksdb::SingleThreaded>) -> RocksDb {
+        RocksDb { db }
+    }
 }
 
 #[warn(clippy::missing_trait_methods)] // TODO(med): should set that at crate level

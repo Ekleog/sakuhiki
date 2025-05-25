@@ -5,7 +5,7 @@ use std::{
 
 use waaa::Future;
 
-use crate::{CfError, Db, IndexError, IndexedDatum};
+use crate::{CfError, Db, IndexedDatum};
 
 pub trait Transaction<'t, B: ?Sized + Backend>
 where
@@ -147,13 +147,7 @@ pub trait BackendBuilder: 'static + Sized + Send {
     type Target: Backend;
     type CfOptions;
 
-    type BuildFuture: waaa::Send
-        + Future<
-            Output = Result<
-                Self::Target,
-                IndexError<<Self::Target as Backend>::Error, anyhow::Error>,
-            >,
-        >;
+    type BuildFuture: waaa::Send + Future<Output = anyhow::Result<Self::Target>>;
 
     fn build(self, config: BuilderConfig<Self::Target>) -> Self::BuildFuture;
 }
@@ -174,10 +168,7 @@ pub struct IndexRebuilder<B: Backend> {
                 &'fut B::Transaction<'t>,
                 &'fut [B::TransactionCf<'t>],
                 &'fut B::TransactionCf<'t>,
-            ) -> waaa::BoxFuture<
-                'fut,
-                Result<(), IndexError<B::Error, anyhow::Error>>,
-            >,
+            ) -> waaa::BoxFuture<'fut, anyhow::Result<()>>,
     >,
 }
 
@@ -266,23 +257,14 @@ impl<B: Backend> Builder<B> {
                 datum_cf: D::CF,
                 index_cfs: i.cfs(),
                 rebuilder: Box::new(move |t, index_cfs, datum_cf| {
-                    Box::pin(async move {
-                        i.rebuild(t, index_cfs, datum_cf)
-                            .await
-                            .map_err(|err| match err {
-                                IndexError::Backend(err) => IndexError::Backend(err),
-                                IndexError::Parsing(err) => {
-                                    IndexError::Parsing(anyhow::Error::from(err))
-                                }
-                            })
-                    })
+                    Box::pin(async move { Ok(i.rebuild(t, index_cfs, datum_cf).await?) })
                 }),
             });
         }
         self
     }
 
-    pub async fn build(&mut self) -> Result<Db<B>, IndexError<B::Error, anyhow::Error>> {
+    pub async fn build(&mut self) -> anyhow::Result<Db<B>> {
         let mut config = self.config.take().expect("Reusing consumed builder");
         let builder = self.builder.take().expect("Reusing consumed builder");
         if self.require_all_cfs_configured {

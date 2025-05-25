@@ -1,11 +1,21 @@
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
-use sakuhiki_core::{BackendBuilder, IndexError, backend::BuilderConfig};
+use anyhow::Context as _;
+use rocksdb::ColumnFamilyDescriptor;
+use sakuhiki_core::{
+    BackendBuilder,
+    backend::{BuilderConfig, CfOptions},
+};
+use tokio::task::spawn_blocking;
 
-use crate::{Error, RocksDb};
+use crate::RocksDb;
 
 pub struct RocksDbBuilder {
-    path: PathBuf,
+    path: Arc<PathBuf>,
     global_opts: Option<rocksdb::Options>,
     txn_db_opts: Option<rocksdb::TransactionDBOptions>,
 }
@@ -13,7 +23,7 @@ pub struct RocksDbBuilder {
 impl RocksDbBuilder {
     pub(crate) fn new<P: AsRef<Path>>(path: P) -> Self {
         RocksDbBuilder {
-            path: path.as_ref().to_owned(),
+            path: Arc::new(path.as_ref().to_owned()),
             global_opts: None,
             txn_db_opts: None,
         }
@@ -42,23 +52,52 @@ impl BackendBuilder for RocksDbBuilder {
     type Target = RocksDb;
     type CfOptions = rocksdb::Options;
 
-    type BuildFuture = waaa::BoxFuture<'static, Result<RocksDb, IndexError<Error, anyhow::Error>>>;
+    type BuildFuture = waaa::BoxFuture<'static, anyhow::Result<RocksDb>>;
 
-    fn build(self, config: BuilderConfig<RocksDb>) -> Self::BuildFuture {
-        todo!() // TODO(high)
+    fn build(self, mut config: BuilderConfig<RocksDb>) -> Self::BuildFuture {
+        Box::pin(async move {
+            let path_d = self.path.display();
 
-        /*
-        let path = path.as_ref();
-        let path_buf = path.to_owned();
-        let db =
-            spawn_blocking(move || rocksdb::TransactionDB::open(&opts, &txn_db_opts, path_buf))
-                .await
-                .map_err(|e| {
-                    Error::spawn_blocking(ErrorWhile::OpeningDatabase(path.to_owned()), e)
-                })?
-                .map_err(|e| Error::rocksdb(ErrorWhile::OpeningDatabase(path.to_owned()), e))?;
-        let cf_options = HashMap::new();
-        Ok(RocksDbBuilder { db, cf_options })
-        */
+            let (options, mut cfs) = spawn_blocking({
+                let path = self.path.clone();
+                move || {
+                    rocksdb::Options::load_latest(
+                        &*path,
+                        rocksdb::Env::new()?,
+                        true,
+                        rocksdb::Cache::new_lru_cache(1024),
+                    )
+                }
+            })
+            .await
+            .with_context(|| format!("Failed joining task that lists CFs for {path_d}"))?
+            .with_context(|| format!("Failed listing CFs for {path_d}"))?;
+
+            let mut opened_cfs = HashSet::new();
+            for cfd in &mut cfs {
+                let cf = cfd.name().to_owned();
+                if let Some(CfOptions::Configured(options)) = config.cfs.remove(&cf as &str) {
+                    // Both ReuseLast and NotConfigured means we'll actually reuse the last configuration
+                    *cfd = ColumnFamilyDescriptor::new(&cf, options);
+                    opened_cfs.insert(cf);
+                }
+            }
+
+            let opts = self.global_opts.unwrap_or_default();
+            let txn_db_opts = self.txn_db_opts.unwrap_or_default();
+            let db = spawn_blocking({
+                let path = self.path.clone();
+                move || {
+                    rocksdb::TransactionDB::open_cf_descriptors(&opts, &txn_db_opts, &*path, cfs)
+                }
+            })
+            .await
+            .with_context(|| format!("Failed joining task that opens database {path_d}"))?
+            .with_context(|| format!("Failed opening database {path_d}"))?;
+
+            // TODO(high): implement drop_unknown_cfs and index_rebuilders
+
+            Ok(RocksDb::new(db))
+        })
     }
 }

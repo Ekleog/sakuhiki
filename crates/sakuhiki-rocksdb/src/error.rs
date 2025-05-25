@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::result::Result as StdResult;
 
 pub type Result<T> = StdResult<T, Error>;
@@ -28,10 +27,7 @@ impl Error {
 
 #[derive(Debug, derive_more::Display)]
 #[non_exhaustive]
-pub enum ErrorWhile {
-    #[display("Failed opening database at {}", _0.display())]
-    OpeningDatabase(PathBuf),
-}
+pub enum ErrorWhile {}
 
 #[derive(Debug, thiserror::Error)]
 enum ErrorSource {

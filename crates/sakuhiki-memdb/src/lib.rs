@@ -8,7 +8,7 @@ use std::{
 use async_lock::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use futures_util::stream;
 use sakuhiki_core::{
-    Backend, CfError, IndexError,
+    Backend, CfError,
     backend::{BackendBuilder, BackendCf, Builder, BuilderConfig},
 };
 
@@ -215,8 +215,7 @@ impl BackendBuilder for MemDbBuilder {
     type Target = MemDb;
     type CfOptions = (); // TODO(blocked): should be !
 
-    type BuildFuture =
-        waaa::BoxFuture<'static, Result<Self::Target, IndexError<Error, anyhow::Error>>>;
+    type BuildFuture = waaa::BoxFuture<'static, anyhow::Result<Self::Target>>;
 
     fn build(self, config: BuilderConfig<MemDb>) -> Self::BuildFuture {
         Box::pin(async move {
