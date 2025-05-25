@@ -1,9 +1,12 @@
-use std::{future::Ready, path::Path};
+use std::{
+    future::{self, Ready},
+    path::Path,
+};
 
 use sakuhiki_core::{Backend, CfError, backend::Builder};
 use tokio::task::block_in_place;
 
-use crate::{Error, RocksDbBuilder, Transaction, TransactionCf};
+use crate::{Error, ErrorKind, RocksDbBuilder, Transaction, TransactionCf};
 
 pub struct RocksDb {
     db: rocksdb::TransactionDB<rocksdb::SingleThreaded>,
@@ -35,7 +38,10 @@ impl Backend for RocksDb {
     type CfHandleFuture<'op> = Ready<Result<Self::Cf<'op>, Self::Error>>;
 
     fn cf_handle<'db>(&'db self, name: &'static str) -> Self::CfHandleFuture<'db> {
-        todo!() // TODO(high)
+        let result = block_in_place(|| self.db.cf_handle(name))
+            .ok_or_else(|| Error::simple(ErrorKind::NoSuchCf(name)))
+            .map(|cf| TransactionCf::new(name, cf));
+        future::ready(result)
     }
 
     type Transaction<'t> = Transaction<'t>;
@@ -79,6 +85,7 @@ impl Backend for RocksDb {
 
     // TODO(blocked): This should be DbPinnableSlice, as soon as
     // https://github.com/rust-rocksdb/rust-rocksdb/issues/1005 gets fixed
+    // TODO(med): still, key/value should probably borrow the Db and not the Transaction?
     type Key<'op> = Vec<u8>;
     type Value<'op> = Vec<u8>;
 }
