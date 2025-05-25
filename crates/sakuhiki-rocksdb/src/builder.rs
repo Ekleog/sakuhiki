@@ -1,7 +1,4 @@
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use sakuhiki_core::{BackendBuilder, IndexError, backend::BuilderConfig};
 
@@ -11,9 +8,6 @@ pub struct RocksDbBuilder {
     path: PathBuf,
     global_opts: Option<rocksdb::Options>,
     txn_db_opts: Option<rocksdb::TransactionDBOptions>,
-    configured_cf_opts: HashMap<&'static str, rocksdb::Options>,
-    require_all_cfs_configured: bool,
-    needed_cf_opts: HashMap<&'static str, rocksdb::Options>,
 }
 
 impl RocksDbBuilder {
@@ -22,9 +16,6 @@ impl RocksDbBuilder {
             path: path.as_ref().to_owned(),
             global_opts: None,
             txn_db_opts: None,
-            configured_cf_opts: HashMap::new(),
-            require_all_cfs_configured: false,
-            needed_cf_opts: HashMap::new(),
         }
     }
 
@@ -43,19 +34,6 @@ impl RocksDbBuilder {
             "Tried setting TransactionDB options multiple times"
         );
         self.txn_db_opts = Some(txn_db_opts);
-        self
-    }
-
-    pub fn cf_option(mut self, cf: &'static str, opts: rocksdb::Options) -> Self {
-        let previous_opts = self.configured_cf_opts.insert(cf, opts);
-        if previous_opts.is_some() {
-            panic!("Configured the same CF {cf:?} multiple times");
-        }
-        self
-    }
-
-    pub fn require_all_cfs_configured(mut self) -> Self {
-        self.require_all_cfs_configured = true;
         self
     }
 }
