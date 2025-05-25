@@ -18,7 +18,7 @@ impl RocksDb {
     }
 
     pub(crate) async fn start_transaction(&self) -> crate::Result<Transaction<'_>> {
-        todo!() // TODO(high)
+        Ok(Transaction::new(self.db.transaction()))
     }
 }
 

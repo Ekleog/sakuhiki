@@ -8,6 +8,14 @@ pub struct Transaction<'t> {
     transaction: Mutex<rocksdb::Transaction<'t, rocksdb::TransactionDB>>,
 }
 
+impl<'t> Transaction<'t> {
+    pub(crate) fn new(t: rocksdb::Transaction<'t, rocksdb::TransactionDB>) -> Self {
+        Self {
+            transaction: Mutex::new(t),
+        }
+    }
+}
+
 impl<'t> sakuhiki_core::backend::Transaction<'t, RocksDb> for Transaction<'t> {
     type ExclusiveLock<'op>
         = ()
