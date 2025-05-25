@@ -6,7 +6,7 @@ use std::{
 use anyhow::Context as _;
 use rocksdb::{ColumnFamilyDescriptor, SingleThreaded};
 use sakuhiki_core::{
-    BackendBuilder,
+    Backend as _, BackendBuilder,
     backend::{BuilderConfig, CfOptions},
 };
 use tokio::task::spawn_blocking;
@@ -135,13 +135,13 @@ impl BackendBuilder for RocksDbBuilder {
                     || i.index_cfs.iter().any(|cf| created_cfs.contains(cf))
                 {
                     let datum_cf = db
-                        .open_cf(i.datum_cf)
+                        .cf_handle(i.datum_cf)
                         .await
                         .with_context(|| format!("Failed opening CF {}", i.datum_cf))?;
                     let mut index_cfs = Vec::with_capacity(i.index_cfs.len());
                     for cf in i.index_cfs {
                         index_cfs.push(
-                            db.open_cf(cf)
+                            db.cf_handle(cf)
                                 .await
                                 .with_context(|| format!("Failed opening CF {}", i.datum_cf))?,
                         );

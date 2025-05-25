@@ -5,7 +5,7 @@ use sakuhiki_core::Backend;
 use crate::{Error, RocksDb, TransactionCf};
 
 pub struct Transaction<'t> {
-    transaction: &'t (), // TODO(high): rocksdb::Transaction<'t, rocksdb::TransactionDB>
+    transaction: &'t (), // TODO(high): rocksdb::Transaction<'t, rocksdb::TransactionDB>,
 }
 
 impl<'t> sakuhiki_core::backend::Transaction<'t, RocksDb> for Transaction<'t> {

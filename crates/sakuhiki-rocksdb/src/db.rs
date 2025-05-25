@@ -17,10 +17,6 @@ impl RocksDb {
         RocksDb { db }
     }
 
-    pub(crate) async fn open_cf(&self, cf: &'static str) -> crate::Result<TransactionCf<'_>> {
-        todo!() // TODO(high)
-    }
-
     pub(crate) async fn start_transaction(&self) -> crate::Result<Transaction<'_>> {
         todo!() // TODO(high)
     }
@@ -32,7 +28,7 @@ impl Backend for RocksDb {
 
     type Builder = RocksDbBuilder;
 
-    type Cf<'db> = &'static str;
+    type Cf<'db> = TransactionCf<'db>;
 
     type CfHandleFuture<'op> = Ready<Result<Self::Cf<'op>, Self::Error>>;
 
