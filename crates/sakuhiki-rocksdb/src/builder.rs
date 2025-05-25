@@ -11,7 +11,7 @@ use sakuhiki_core::{
 };
 use tokio::task::spawn_blocking;
 
-use crate::{RocksDb, Transaction, TransactionCf};
+use crate::RocksDb;
 
 pub struct RocksDbBuilder {
     path: PathBuf,
@@ -50,7 +50,7 @@ impl RocksDbBuilder {
         self,
         mut cfs: HashMap<&'static str, CfOptions<RocksDb>>,
         drop_unknown_cfs: bool,
-    ) -> anyhow::Result<(rocksdb::TransactionDB, HashSet<&'static str>)> {
+    ) -> anyhow::Result<(RocksDb, HashSet<&'static str>)> {
         let path_d = self.path.display();
 
         // List pre-existing CFs
@@ -108,7 +108,7 @@ impl RocksDbBuilder {
             created_cfs.insert(cf);
         }
 
-        Ok((db, created_cfs))
+        Ok((RocksDb::new(db), created_cfs))
     }
 }
 
@@ -134,25 +134,26 @@ impl BackendBuilder for RocksDbBuilder {
                 if created_cfs.contains(i.datum_cf)
                     || i.index_cfs.iter().any(|cf| created_cfs.contains(cf))
                 {
-                    let datum_cf = TransactionCf::open(&db, i.datum_cf)
+                    let datum_cf = db
+                        .open_cf(i.datum_cf)
                         .await
                         .with_context(|| format!("Failed opening CF {}", i.datum_cf))?;
                     let mut index_cfs = Vec::with_capacity(i.index_cfs.len());
                     for cf in i.index_cfs {
                         index_cfs.push(
-                            TransactionCf::open(&db, cf)
+                            db.open_cf(cf)
                                 .await
                                 .with_context(|| format!("Failed opening CF {}", i.datum_cf))?,
                         );
                     }
-                    let t = Transaction::start(&db).await?;
+                    let t = db.start_transaction().await?;
                     (i.rebuilder)(&t, &index_cfs, &datum_cf)
                         .await
                         .with_context(|| format!("Rebuilding index with CFs {:?}", i.index_cfs))?;
                 }
             }
 
-            Ok(RocksDb::new(db))
+            Ok(db)
         })
     }
 }

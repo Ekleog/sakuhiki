@@ -4,15 +4,11 @@ use sakuhiki_core::Backend;
 
 use crate::{Error, RocksDb, TransactionCf};
 
-pub struct Transaction {}
-
-impl Transaction {
-    pub(crate) async fn start(db: &rocksdb::TransactionDB) -> crate::Result<Self> {
-        todo!() // TODO(high)
-    }
+pub struct Transaction<'t> {
+    transaction: &'t (), // TODO(high): rocksdb::Transaction<'t, rocksdb::TransactionDB>
 }
 
-impl<'t> sakuhiki_core::backend::Transaction<'t, RocksDb> for Transaction {
+impl<'t> sakuhiki_core::backend::Transaction<'t, RocksDb> for Transaction<'t> {
     type ExclusiveLock<'op>
         = ()
     where

@@ -12,8 +12,8 @@ impl BackendCf for TransactionCf<'_> {
     }
 }
 
-impl TransactionCf<'_> {
-    pub(crate) async fn open(db: &rocksdb::TransactionDB, name: &str) -> crate::Result<Self> {
-        todo!() // TODO(high)
+impl<'t> TransactionCf<'t> {
+    pub(crate) fn new(name: &'static str, cf: &'t ColumnFamily) -> Self {
+        TransactionCf { cf, name }
     }
 }

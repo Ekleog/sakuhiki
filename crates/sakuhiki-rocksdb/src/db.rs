@@ -16,6 +16,14 @@ impl RocksDb {
     pub(crate) fn new(db: rocksdb::TransactionDB<rocksdb::SingleThreaded>) -> RocksDb {
         RocksDb { db }
     }
+
+    pub(crate) async fn open_cf(&self, cf: &'static str) -> crate::Result<TransactionCf<'_>> {
+        todo!() // TODO(high)
+    }
+
+    pub(crate) async fn start_transaction(&self) -> crate::Result<Transaction<'_>> {
+        todo!() // TODO(high)
+    }
 }
 
 #[warn(clippy::missing_trait_methods)] // TODO(med): should set that at crate level
@@ -32,7 +40,7 @@ impl Backend for RocksDb {
         todo!() // TODO(high)
     }
 
-    type Transaction<'t> = Transaction;
+    type Transaction<'t> = Transaction<'t>;
     type TransactionCf<'t> = TransactionCf<'t>;
 
     fn ro_transaction<'fut, 'db, F, Ret>(
@@ -43,7 +51,11 @@ impl Backend for RocksDb {
     where
         F: 'fut
             + waaa::Send
-            + for<'t> FnOnce(&'t (), Transaction, Vec<TransactionCf<'t>>) -> waaa::BoxFuture<'t, Ret>,
+            + for<'t> FnOnce(
+                &'t (),
+                Transaction<'t>,
+                Vec<TransactionCf<'t>>,
+            ) -> waaa::BoxFuture<'t, Ret>,
     {
         Box::pin(async move {
             todo!() // TODO(high)
