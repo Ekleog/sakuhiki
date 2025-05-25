@@ -9,16 +9,8 @@ pub struct RocksDb {
 }
 
 impl RocksDb {
-    pub async fn builder<P: AsRef<Path>>(path: P) -> crate::Result<RocksDbBuilder> {
-        RocksDbBuilder::new(path).await
-    }
-
-    pub async fn with_options<P: AsRef<Path>>(
-        opts: rocksdb::Options,
-        txn_db_opts: rocksdb::TransactionDBOptions,
-        path: P,
-    ) -> crate::Result<RocksDbBuilder> {
-        RocksDbBuilder::with_options(opts, txn_db_opts, path).await
+    pub fn builder<P: AsRef<Path>>(path: P) -> RocksDbBuilder {
+        RocksDbBuilder::new(path)
     }
 }
 
