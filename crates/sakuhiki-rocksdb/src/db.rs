@@ -75,6 +75,8 @@ impl Backend for RocksDb {
         self.ro_transaction(cfs, actions) // TODO(high)
     }
 
-    type Key<'op> = Vec<u8>; // TODO(high)
-    type Value<'op> = Vec<u8>; // TODO(high)
+    // TODO(blocked): This should be DbPinnableSlice, as soon as
+    // https://github.com/rust-rocksdb/rust-rocksdb/issues/1005 gets fixed
+    type Key<'op> = Vec<u8>;
+    type Value<'op> = Vec<u8>;
 }
