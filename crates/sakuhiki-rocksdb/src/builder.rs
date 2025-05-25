@@ -19,7 +19,7 @@ impl RocksDbBuilder {
         }
     }
 
-    pub fn global_opts(mut self, opts: rocksdb::Options) -> Self {
+    pub fn global_opts(&mut self, opts: rocksdb::Options) -> &mut Self {
         assert!(
             self.global_opts.is_none(),
             "Tried setting global options multiple times"
@@ -28,7 +28,7 @@ impl RocksDbBuilder {
         self
     }
 
-    pub fn txn_db_opts(mut self, txn_db_opts: rocksdb::TransactionDBOptions) -> Self {
+    pub fn txn_db_opts(&mut self, txn_db_opts: rocksdb::TransactionDBOptions) -> &mut Self {
         assert!(
             self.txn_db_opts.is_none(),
             "Tried setting TransactionDB options multiple times"

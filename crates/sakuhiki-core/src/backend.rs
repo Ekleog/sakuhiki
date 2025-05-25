@@ -210,6 +210,12 @@ impl<B: Backend> Builder<B> {
         }
     }
 
+    pub fn backend_config(&mut self, f: impl FnOnce(&mut B::Builder)) -> &mut Self {
+        let builder = self.builder.as_mut().expect("Reusing consumed builder");
+        (f)(builder);
+        self
+    }
+
     pub fn require_all_cfs_configured(&mut self) -> &mut Self {
         self.require_all_cfs_configured = true;
         self
