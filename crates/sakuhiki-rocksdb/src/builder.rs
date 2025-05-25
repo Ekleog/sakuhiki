@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     path::{Path, PathBuf},
 };
 
@@ -11,7 +11,7 @@ use sakuhiki_core::{
 };
 use tokio::task::spawn_blocking;
 
-use crate::RocksDb;
+use crate::{RocksDb, Transaction, TransactionCf};
 
 pub struct RocksDbBuilder {
     path: PathBuf,
@@ -46,7 +46,11 @@ impl RocksDbBuilder {
         self
     }
 
-    fn blocking_build(self, mut config: BuilderConfig<RocksDb>) -> anyhow::Result<RocksDb> {
+    fn blocking_build_without_index_rebuilding(
+        self,
+        mut cfs: HashMap<&'static str, CfOptions<RocksDb>>,
+        drop_unknown_cfs: bool,
+    ) -> anyhow::Result<(rocksdb::TransactionDB, HashSet<&'static str>)> {
         let path_d = self.path.display();
 
         // List pre-existing CFs
@@ -62,7 +66,7 @@ impl RocksDbBuilder {
         let mut opened_unknown_cfs = HashSet::new();
         for cfd in &mut preexisting_cfs {
             let cf = cfd.name().to_owned();
-            if let Some(CfOptions::Configured(options)) = config.cfs.remove(&cf as &str) {
+            if let Some(CfOptions::Configured(options)) = cfs.remove(&cf as &str) {
                 // Both ReuseLast and NotConfigured means we'll actually reuse the last configuration
                 *cfd = ColumnFamilyDescriptor::new(&cf, options);
             } else {
@@ -82,7 +86,7 @@ impl RocksDbBuilder {
         .with_context(|| format!("Failed opening database {path_d}"))?;
 
         // Drop unknown CFs
-        if config.drop_unknown_cfs {
+        if drop_unknown_cfs {
             for cf in opened_unknown_cfs {
                 db.drop_cf(&cf)
                     .with_context(|| format!("Dropping unknown CF {cf}"))?;
@@ -91,7 +95,7 @@ impl RocksDbBuilder {
 
         // Create missing CFs
         let mut created_cfs = HashSet::new();
-        for (cf, options) in config.cfs {
+        for (cf, options) in cfs {
             let options = match options {
                 CfOptions::Configured(options) => options,
                 CfOptions::NotConfigured => rocksdb::Options::default(),
@@ -104,12 +108,7 @@ impl RocksDbBuilder {
             created_cfs.insert(cf);
         }
 
-        // Rebuild indexes if needed
-        for i in config.index_rebuilders {
-            // TODO(high): do it
-        }
-
-        Ok(RocksDb::new(db))
+        Ok((db, created_cfs))
     }
 }
 
@@ -122,11 +121,38 @@ impl BackendBuilder for RocksDbBuilder {
     fn build(self, mut config: BuilderConfig<RocksDb>) -> Self::BuildFuture {
         Box::pin(async move {
             let path_d = self.path.display().to_string();
-            spawn_blocking(move || self.blocking_build(config))
-                .await
-                .with_context(|| {
-                    format!("Failed joining task that builds the database for {path_d}")
-                })?
+            let (db, created_cfs) = spawn_blocking(move || {
+                self.blocking_build_without_index_rebuilding(config.cfs, config.drop_unknown_cfs)
+            })
+            .await
+            .with_context(|| {
+                format!("Failed joining task that builds the database for {path_d}")
+            })??;
+
+            // Rebuild indexes if needed
+            for i in config.index_rebuilders {
+                if created_cfs.contains(i.datum_cf)
+                    || i.index_cfs.iter().any(|cf| created_cfs.contains(cf))
+                {
+                    let datum_cf = TransactionCf::open(&db, i.datum_cf)
+                        .await
+                        .with_context(|| format!("Failed opening CF {}", i.datum_cf))?;
+                    let mut index_cfs = Vec::with_capacity(i.index_cfs.len());
+                    for cf in i.index_cfs {
+                        index_cfs.push(
+                            TransactionCf::open(&db, cf)
+                                .await
+                                .with_context(|| format!("Failed opening CF {}", i.datum_cf))?,
+                        );
+                    }
+                    let t = Transaction::start(&db).await?;
+                    (i.rebuilder)(&t, &index_cfs, &datum_cf)
+                        .await
+                        .with_context(|| format!("Rebuilding index with CFs {:?}", i.index_cfs))?;
+                }
+            }
+
+            Ok(RocksDb::new(db))
         })
     }
 }

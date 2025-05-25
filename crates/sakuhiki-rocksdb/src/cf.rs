@@ -11,3 +11,9 @@ impl BackendCf for TransactionCf<'_> {
         self.name
     }
 }
+
+impl TransactionCf<'_> {
+    pub(crate) async fn open(db: &rocksdb::TransactionDB, name: &str) -> crate::Result<Self> {
+        todo!() // TODO(high)
+    }
+}

@@ -6,6 +6,12 @@ use crate::{Error, RocksDb, TransactionCf};
 
 pub struct Transaction {}
 
+impl Transaction {
+    pub(crate) async fn start(db: &rocksdb::TransactionDB) -> crate::Result<Self> {
+        todo!() // TODO(high)
+    }
+}
+
 impl<'t> sakuhiki_core::backend::Transaction<'t, RocksDb> for Transaction {
     type ExclusiveLock<'op>
         = ()
