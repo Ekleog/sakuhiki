@@ -1,19 +1,40 @@
+use std::path::Path;
+
 use sakuhiki_core::{Backend, BackendBuilder, Datum, Db, IndexError};
+use tokio::task::spawn_blocking;
 
-use crate::{Error, RocksDb};
+use crate::{Error, ErrorWhile, RocksDb};
 
-// TODO(high)
-pub struct RocksDbBuilder {}
-
-impl RocksDbBuilder {
-    pub fn new() -> RocksDbBuilder {
-        RocksDbBuilder {}
-    }
+pub struct RocksDbBuilder {
+    db: rocksdb::TransactionDB<rocksdb::SingleThreaded>,
 }
 
-impl Default for RocksDbBuilder {
-    fn default() -> RocksDbBuilder {
-        RocksDbBuilder::new()
+impl RocksDbBuilder {
+    pub async fn new<P: AsRef<Path>>(path: P) -> crate::Result<RocksDbBuilder> {
+        let path = path.as_ref();
+        let path_buf = path.to_owned();
+        let db = spawn_blocking(move || rocksdb::TransactionDB::open_default(path_buf))
+            .await
+            .map_err(|e| Error::spawn_blocking(ErrorWhile::OpeningDatabase(path.to_owned()), e))?
+            .map_err(|e| Error::rocksdb(ErrorWhile::OpeningDatabase(path.to_owned()), e))?;
+        Ok(RocksDbBuilder { db })
+    }
+
+    pub async fn with_options<P: AsRef<Path>>(
+        opts: rocksdb::Options,
+        txn_db_opts: rocksdb::TransactionDBOptions,
+        path: P,
+    ) -> crate::Result<RocksDbBuilder> {
+        let path = path.as_ref();
+        let path_buf = path.to_owned();
+        let db =
+            spawn_blocking(move || rocksdb::TransactionDB::open(&opts, &txn_db_opts, path_buf))
+                .await
+                .map_err(|e| {
+                    Error::spawn_blocking(ErrorWhile::OpeningDatabase(path.to_owned()), e)
+                })?
+                .map_err(|e| Error::rocksdb(ErrorWhile::OpeningDatabase(path.to_owned()), e))?;
+        Ok(RocksDbBuilder { db })
     }
 }
 

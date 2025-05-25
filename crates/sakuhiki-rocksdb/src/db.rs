@@ -1,4 +1,4 @@
-use std::future::Ready;
+use std::{future::Ready, path::Path};
 
 use sakuhiki_core::{Backend, CfError};
 
@@ -9,8 +9,16 @@ pub struct RocksDb {
 }
 
 impl RocksDb {
-    pub fn builder() -> RocksDbBuilder {
-        RocksDbBuilder::new()
+    pub async fn builder<P: AsRef<Path>>(path: P) -> crate::Result<RocksDbBuilder> {
+        RocksDbBuilder::new(path).await
+    }
+
+    pub async fn with_options<P: AsRef<Path>>(
+        opts: rocksdb::Options,
+        txn_db_opts: rocksdb::TransactionDBOptions,
+        path: P,
+    ) -> crate::Result<RocksDbBuilder> {
+        RocksDbBuilder::with_options(opts, txn_db_opts, path).await
     }
 }
 

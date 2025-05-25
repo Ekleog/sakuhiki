@@ -16,6 +16,8 @@ rust-version.workspace = true
 sakuhiki-core.workspace = true
 
 anyhow.workspace = true
+derive_more.workspace = true
 rocksdb.workspace = true
+tokio = { workspace = true, features = ["rt"] }
 thiserror.workspace = true
 waaa.workspace = true
