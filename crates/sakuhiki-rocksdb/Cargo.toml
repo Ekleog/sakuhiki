@@ -18,6 +18,6 @@ sakuhiki-core.workspace = true
 anyhow.workspace = true
 derive_more.workspace = true
 rocksdb.workspace = true
-tokio = { workspace = true, features = ["rt"] }
+tokio = { workspace = true, features = ["rt", "rt-multi-thread"] }
 thiserror.workspace = true
 waaa.workspace = true

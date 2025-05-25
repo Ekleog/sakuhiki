@@ -1,6 +1,7 @@
 use std::{future::Ready, path::Path};
 
 use sakuhiki_core::{Backend, CfError, backend::Builder};
+use tokio::task::block_in_place;
 
 use crate::{Error, RocksDbBuilder, Transaction, TransactionCf};
 
@@ -18,7 +19,8 @@ impl RocksDb {
     }
 
     pub(crate) async fn start_transaction(&self) -> crate::Result<Transaction<'_>> {
-        Ok(Transaction::new(self.db.transaction()))
+        let t = block_in_place(|| self.db.transaction());
+        Ok(Transaction::new(t))
     }
 }
 
