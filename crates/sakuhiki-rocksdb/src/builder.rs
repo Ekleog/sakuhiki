@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{collections::HashMap, path::Path};
 
 use sakuhiki_core::{Backend, BackendBuilder, Datum, Db, IndexError};
 use tokio::task::spawn_blocking;
@@ -7,6 +7,7 @@ use crate::{Error, ErrorWhile, RocksDb};
 
 pub struct RocksDbBuilder {
     db: rocksdb::TransactionDB<rocksdb::SingleThreaded>,
+    cf_options: HashMap<&'static str, rocksdb::Options>,
 }
 
 impl RocksDbBuilder {
@@ -17,7 +18,8 @@ impl RocksDbBuilder {
             .await
             .map_err(|e| Error::spawn_blocking(ErrorWhile::OpeningDatabase(path.to_owned()), e))?
             .map_err(|e| Error::rocksdb(ErrorWhile::OpeningDatabase(path.to_owned()), e))?;
-        Ok(RocksDbBuilder { db })
+        let cf_options = HashMap::new();
+        Ok(RocksDbBuilder { db, cf_options })
     }
 
     pub async fn with_options<P: AsRef<Path>>(
@@ -34,7 +36,17 @@ impl RocksDbBuilder {
                     Error::spawn_blocking(ErrorWhile::OpeningDatabase(path.to_owned()), e)
                 })?
                 .map_err(|e| Error::rocksdb(ErrorWhile::OpeningDatabase(path.to_owned()), e))?;
-        Ok(RocksDbBuilder { db })
+        let cf_options = HashMap::new();
+        Ok(RocksDbBuilder { db, cf_options })
+    }
+
+    pub fn cf_option(self, cf: &'static str, opts: rocksdb::Options) -> Self {
+        let mut this = self;
+        let previous_opts = this.cf_options.insert(cf, opts);
+        if previous_opts.is_some() {
+            panic!("Configured the same CF {cf:?} multiple times");
+        }
+        this
     }
 }
 
