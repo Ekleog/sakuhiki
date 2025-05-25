@@ -7,6 +7,7 @@ pkgs.mkShell.override {
   name = "sakuhiki";
   buildInputs = with pkgs; [
     cargo-nextest
+    just
     niv
     pkg-config
 
