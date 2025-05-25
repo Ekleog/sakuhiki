@@ -6,12 +6,14 @@ use crate::{Error, RocksDb, TransactionCf};
 
 pub struct Transaction<'t> {
     transaction: Mutex<rocksdb::Transaction<'t, rocksdb::TransactionDB>>,
+    rw: bool,
 }
 
 impl<'t> Transaction<'t> {
-    pub(crate) fn new(t: rocksdb::Transaction<'t, rocksdb::TransactionDB>) -> Self {
+    pub(crate) fn new(t: rocksdb::Transaction<'t, rocksdb::TransactionDB>, rw: bool) -> Self {
         Self {
             transaction: Mutex::new(t),
+            rw,
         }
     }
 }

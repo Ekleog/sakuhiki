@@ -21,9 +21,27 @@ impl RocksDb {
         RocksDb { db }
     }
 
-    pub(crate) async fn start_transaction(&self) -> crate::Result<Transaction<'_>> {
+    pub(crate) async fn start_transaction(&self, rw: bool) -> crate::Result<Transaction<'_>> {
         let t = block_in_place(|| self.db.transaction());
-        Ok(Transaction::new(t))
+        Ok(Transaction::new(t, rw))
+    }
+
+    fn transaction<'fut, 'db, F, Ret>(
+        &'fut self,
+        rw: bool,
+        cfs: &'fut [&'fut TransactionCf<'db>],
+        actions: F,
+    ) -> waaa::BoxFuture<'fut, Result<Ret, CfError<Error>>>
+    where
+        F: 'fut
+            + waaa::Send
+            + for<'t> FnOnce(
+                &'t (),
+                Transaction<'t>,
+                Vec<TransactionCf<'t>>,
+            ) -> waaa::BoxFuture<'t, Ret>,
+    {
+        todo!() // TODO(high)
     }
 }
 
@@ -61,9 +79,7 @@ impl Backend for RocksDb {
                 Vec<TransactionCf<'t>>,
             ) -> waaa::BoxFuture<'t, Ret>,
     {
-        Box::pin(async move {
-            todo!() // TODO(high)
-        })
+        self.transaction(false, cfs, actions)
     }
 
     fn rw_transaction<'fut, 'db, F, Ret>(
@@ -80,7 +96,7 @@ impl Backend for RocksDb {
                 Vec<Self::TransactionCf<'t>>,
             ) -> waaa::BoxFuture<'t, Ret>,
     {
-        self.ro_transaction(cfs, actions) // TODO(high)
+        self.transaction(true, cfs, actions)
     }
 
     // TODO(blocked): This should be DbPinnableSlice, as soon as

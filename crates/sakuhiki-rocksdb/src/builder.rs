@@ -146,7 +146,7 @@ impl BackendBuilder for RocksDbBuilder {
                                 .with_context(|| format!("Failed opening CF {}", i.datum_cf))?,
                         );
                     }
-                    let t = db.start_transaction().await?;
+                    let t = db.start_transaction(true).await?;
                     (i.rebuilder)(&t, &index_cfs, &datum_cf)
                         .await
                         .with_context(|| format!("Rebuilding index with CFs {:?}", i.index_cfs))?;
