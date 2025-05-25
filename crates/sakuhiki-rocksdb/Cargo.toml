@@ -15,4 +15,7 @@ rust-version.workspace = true
 [dependencies]
 sakuhiki-core.workspace = true
 
+anyhow.workspace = true
 rocksdb.workspace = true
+thiserror.workspace = true
+waaa.workspace = true
