@@ -1,9 +1,11 @@
-use std::ops::RangeBounds;
+use std::{
+    collections::{HashMap, HashSet},
+    ops::RangeBounds,
+};
 
-use futures_util::{TryStreamExt as _, stream};
 use waaa::Future;
 
-use crate::{CfError, Datum, Db, IndexError, IndexedDatum, Indexer};
+use crate::{CfError, Db, IndexError, IndexedDatum};
 
 pub trait Transaction<'t, B: ?Sized + Backend>
 where
@@ -143,58 +145,162 @@ pub trait BackendCf: waaa::Send + waaa::Sync {
 
 pub trait BackendBuilder: 'static + Sized + Send {
     type Target: Backend;
-
-    #[allow(clippy::type_complexity)]
-    fn datum<D: IndexedDatum<Self::Target>>(
-        self,
-    ) -> waaa::BoxFuture<
-        'static,
-        Result<Self, IndexError<<Self::Target as Backend>::Error, anyhow::Error>>,
-    > {
-        Box::pin(async move {
-            let this = self
-                .build_datum_cf(D::CF)
-                .await
-                .map_err(|e| IndexError::Backend(CfError::new(D::CF, e)))?;
-            stream::iter(D::INDEXES.iter().map(Ok))
-                .try_fold(this, |this, i| async move {
-                    this.build_index_cf(*i).await.map_err(|e| match e {
-                        IndexError::Backend(e) => IndexError::Backend(e),
-                        IndexError::Parsing(e) => IndexError::Parsing(
-                            anyhow::Error::from(e)
-                                .context(format!("building index cfs '{:?}'", i.cfs())),
-                        ),
-                    })
-                })
-                .await
-        })
-    }
-
-    fn build_datum_cf(
-        self,
-        cf: &'static str,
-    ) -> waaa::BoxFuture<'static, Result<Self, <Self::Target as Backend>::Error>>;
-
-    #[allow(clippy::type_complexity)]
-    fn build_index_cf<I: ?Sized + Indexer<Self::Target>>(
-        self,
-        index: &I,
-    ) -> waaa::BoxFuture<
-        '_,
-        Result<Self, IndexError<<Self::Target as Backend>::Error, <I::Datum as Datum>::Error>>,
-    >;
-
-    fn drop_unknown_cfs(
-        self,
-    ) -> waaa::BoxFuture<'static, Result<Self, <Self::Target as Backend>::Error>>;
+    type CfOptions;
 
     type BuildFuture: waaa::Send
         + Future<
             Output = Result<
-                Db<Self::Target>,
+                Self::Target,
                 IndexError<<Self::Target as Backend>::Error, anyhow::Error>,
             >,
         >;
 
-    fn build(self) -> Self::BuildFuture;
+    fn build(self, config: BuilderConfig<Self::Target>) -> Self::BuildFuture;
+}
+
+pub enum CfOptions<B: Backend> {
+    Configured(<B::Builder as BackendBuilder>::CfOptions),
+    ReuseLast,
+    NotConfigured,
+}
+
+pub struct IndexRebuilder<B: Backend> {
+    pub datum_cf: &'static str,
+    pub index_cfs: &'static [&'static str],
+    #[allow(clippy::type_complexity)]
+    pub rebuilder: Box<
+        dyn Send
+            + for<'fut, 't> FnOnce(
+                &'fut B::Transaction<'t>,
+                &'fut [B::TransactionCf<'t>],
+                &'fut B::TransactionCf<'t>,
+            ) -> waaa::BoxFuture<
+                'fut,
+                Result<(), IndexError<B::Error, anyhow::Error>>,
+            >,
+    >,
+}
+
+pub struct BuilderConfig<B: Backend> {
+    pub cfs: HashMap<&'static str, CfOptions<B>>,
+    pub drop_unknown_cfs: bool,
+    pub index_rebuilders: Vec<IndexRebuilder<B>>,
+}
+
+pub struct Builder<B: Backend> {
+    builder: Option<B::Builder>,
+    config: Option<BuilderConfig<B>>,
+    used_cfs: HashSet<&'static str>,
+    require_all_cfs_configured: bool,
+    allow_extra_cf_config: bool,
+}
+
+impl<B: Backend> Builder<B> {
+    pub fn new(builder: B::Builder) -> Self {
+        Self {
+            builder: Some(builder),
+            config: Some(BuilderConfig {
+                cfs: HashMap::new(),
+                drop_unknown_cfs: false,
+                index_rebuilders: Vec::new(),
+            }),
+            used_cfs: HashSet::new(),
+            require_all_cfs_configured: false,
+            allow_extra_cf_config: false,
+        }
+    }
+
+    pub fn require_all_cfs_configured(&mut self) -> &mut Self {
+        self.require_all_cfs_configured = true;
+        self
+    }
+
+    pub fn allow_extra_cf_config(&mut self) -> &mut Self {
+        self.allow_extra_cf_config = true;
+        self
+    }
+
+    pub fn drop_unknown_cfs(&mut self) -> &mut Self {
+        let config = self.config.as_mut().expect("Reusing consumed builder");
+        config.drop_unknown_cfs = true;
+        self
+    }
+
+    pub fn cf_options(
+        &mut self,
+        cf: &'static str,
+        options: <B::Builder as BackendBuilder>::CfOptions,
+    ) -> &mut Self {
+        let config = self.config.as_mut().expect("Reusing consumed builder");
+        let previous = config.cfs.insert(cf, CfOptions::Configured(options));
+        assert!(previous.is_none(), "Configured CF {cf} multiple times");
+        self
+    }
+
+    pub fn cf_options_reuse_last(&mut self, cf: &'static str) -> &mut Self {
+        let config = self.config.as_mut().expect("Reusing consumed builder");
+        let previous = config.cfs.insert(cf, CfOptions::ReuseLast);
+        assert!(previous.is_none(), "Configured CF {cf} multiple times");
+        self
+    }
+
+    pub fn datum<D: IndexedDatum<B>>(&mut self) -> &mut Self {
+        fn require_cf(used_cfs: &mut HashSet<&'static str>, cf: &'static str) {
+            let new_insert = used_cfs.insert(cf);
+            assert!(new_insert, "Multiple datum types require the same CF {cf}");
+        }
+
+        let config = self.config.as_mut().expect("Reusing consumed builder");
+        require_cf(&mut self.used_cfs, D::CF);
+        for i in D::INDEXES {
+            for cf in i.cfs() {
+                require_cf(&mut self.used_cfs, cf);
+            }
+            config.index_rebuilders.push(IndexRebuilder {
+                datum_cf: D::CF,
+                index_cfs: i.cfs(),
+                rebuilder: Box::new(move |t, index_cfs, datum_cf| {
+                    Box::pin(async move {
+                        i.rebuild(t, index_cfs, datum_cf)
+                            .await
+                            .map_err(|err| match err {
+                                IndexError::Backend(err) => IndexError::Backend(err),
+                                IndexError::Parsing(err) => {
+                                    IndexError::Parsing(anyhow::Error::from(err))
+                                }
+                            })
+                    })
+                }),
+            });
+        }
+        self
+    }
+
+    pub async fn build(&mut self) -> Result<Db<B>, IndexError<B::Error, anyhow::Error>> {
+        let mut config = self.config.take().expect("Reusing consumed builder");
+        let builder = self.builder.take().expect("Reusing consumed builder");
+        if self.require_all_cfs_configured {
+            for cf in &self.used_cfs {
+                assert!(
+                    config.cfs.contains_key(cf),
+                    "All CFs must be configured but {cf} is not"
+                );
+            }
+        } else {
+            for cf in &self.used_cfs {
+                config.cfs.entry(cf).or_insert(CfOptions::NotConfigured);
+            }
+        }
+        if self.allow_extra_cf_config {
+            config.cfs.retain(|k, _| self.used_cfs.contains(k));
+        } else {
+            for cf in config.cfs.keys() {
+                assert!(
+                    self.used_cfs.contains(cf),
+                    "Unused CF configuration for {cf}"
+                );
+            }
+        }
+        builder.build(config).await.map(Db::new)
+    }
 }

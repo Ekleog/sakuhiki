@@ -8,8 +8,8 @@ use std::{
 use async_lock::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use futures_util::stream;
 use sakuhiki_core::{
-    Backend, CfError, Datum, Db, IndexError,
-    backend::{BackendBuilder, BackendCf},
+    Backend, CfError, IndexError,
+    backend::{BackendBuilder, BackendCf, Builder, BuilderConfig},
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -36,20 +36,8 @@ pub struct MemDb {
 }
 
 impl MemDb {
-    pub fn new() -> MemDb {
-        MemDb {
-            db: BTreeMap::new(),
-        }
-    }
-
-    pub fn builder() -> MemDbBuilder {
-        MemDbBuilder::new()
-    }
-}
-
-impl Default for MemDb {
-    fn default() -> MemDb {
-        MemDb::new()
+    pub fn builder() -> Builder<MemDb> {
+        Builder::new(MemDbBuilder { _private: () })
     }
 }
 
@@ -220,83 +208,42 @@ impl<'t> sakuhiki_core::backend::Transaction<'t, MemDb> for Transaction {
 }
 
 pub struct MemDbBuilder {
-    db: MemDb,
-}
-
-impl MemDbBuilder {
-    pub fn new() -> MemDbBuilder {
-        MemDbBuilder { db: MemDb::new() }
-    }
-}
-
-impl Default for MemDbBuilder {
-    fn default() -> MemDbBuilder {
-        MemDbBuilder::new()
-    }
+    _private: (),
 }
 
 impl BackendBuilder for MemDbBuilder {
     type Target = MemDb;
+    type CfOptions = (); // TODO(blocked): should be !
 
-    fn build_datum_cf(
-        mut self,
-        cf: &'static str,
-    ) -> waaa::BoxFuture<'static, Result<Self, <Self::Target as Backend>::Error>> {
-        self.db
-            .db
-            .insert(cf.to_string(), AsyncMutex::new(ColumnFamily::new()));
-        Box::pin(future::ready(Ok(self)))
-    }
+    type BuildFuture =
+        waaa::BoxFuture<'static, Result<Self::Target, IndexError<Error, anyhow::Error>>>;
 
-    fn build_index_cf<I: ?Sized + sakuhiki_core::Indexer<Self::Target>>(
-        mut self,
-        index: &I,
-    ) -> waaa::BoxFuture<
-        '_,
-        Result<Self, IndexError<<Self::Target as Backend>::Error, <I::Datum as Datum>::Error>>,
-    > {
-        let index_cf_names = index.cfs();
-        if self.db.db.contains_key(index_cf_names[0]) {
-            assert!(index_cf_names.iter().all(|cf| self.db.db.contains_key(*cf))); // TODO(med): will be interesting to make this wrong for comparative fuzz-testing
-            return Box::pin(future::ready(Ok(self)));
-        }
-        for cf in index_cf_names {
-            self.db
-                .db
-                .insert(cf.to_string(), AsyncMutex::new(ColumnFamily::new()));
-        }
-
-        let datum_cf_name = <I::Datum as Datum>::CF;
-
+    fn build(self, config: BuilderConfig<MemDb>) -> Self::BuildFuture {
         Box::pin(async move {
-            {
-                let mut index_cfs = Vec::with_capacity(index_cf_names.len());
-                for cf in index_cf_names {
+            let mut db = MemDb {
+                db: BTreeMap::new(),
+            };
+            for (cf, _opts) in config.cfs {
+                db.db
+                    .insert(cf.to_string(), AsyncMutex::new(ColumnFamily::new()));
+            }
+            // Note: drop_unknown_cfs currently has no impact as we're always starting from scratch, though it could be useful in tests to check db recovery
+            for i in config.index_rebuilders {
+                let mut index_cfs = Vec::with_capacity(i.index_cfs.len());
+                for cf in i.index_cfs {
                     index_cfs.push(TransactionCf {
                         name: cf,
-                        cf: Mutex::new(self.db.db.get(*cf).unwrap().lock().await),
+                        cf: Mutex::new(db.db.get(*cf).unwrap().lock().await),
                     });
                 }
                 let datum_cf = TransactionCf {
-                    name: datum_cf_name,
-                    cf: Mutex::new(self.db.db.get(datum_cf_name).unwrap().lock().await),
+                    name: i.datum_cf,
+                    cf: Mutex::new(db.db.get(i.datum_cf).unwrap().lock().await),
                 };
-                index
-                    .rebuild(&Transaction { _private: () }, &index_cfs, &datum_cf)
-                    .await?;
+                let t = Transaction { _private: () };
+                (i.rebuilder)(&t, &index_cfs, &datum_cf).await?;
             }
-            Ok(self)
+            Ok(db)
         })
-    }
-
-    fn drop_unknown_cfs(self) -> waaa::BoxFuture<'static, Result<MemDbBuilder, Error>> {
-        todo!() // TODO(med): not implemented in memdb yet, will be useful for comparative fuzz-testing later
-    }
-
-    type BuildFuture =
-        waaa::BoxFuture<'static, Result<Db<Self::Target>, IndexError<Error, anyhow::Error>>>;
-
-    fn build(self) -> Self::BuildFuture {
-        Box::pin(future::ready(Ok(Db::new(self.db))))
     }
 }

@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use sakuhiki_core::{Backend, BackendBuilder, Datum, Db, IndexError};
+use sakuhiki_core::{BackendBuilder, IndexError, backend::BuilderConfig};
 
 use crate::{Error, RocksDb};
 
@@ -62,48 +62,11 @@ impl RocksDbBuilder {
 
 impl BackendBuilder for RocksDbBuilder {
     type Target = RocksDb;
+    type CfOptions = rocksdb::Options;
 
-    fn build_datum_cf(
-        mut self,
-        cf: &'static str,
-    ) -> waaa::BoxFuture<'static, Result<Self, <Self::Target as Backend>::Error>> {
-        // TODO(high): this should probably be a non-async fn, pushing all async work back to `build`
-        Box::pin(async move {
-            let opts = self.configured_cf_opts.remove(cf);
-            match opts {
-                None => {
-                    if self.require_all_cfs_configured {
-                        panic!("Datum '{cf}' is not configured, but all CFs must be configured");
-                    } else {
-                        self.needed_cf_opts.insert(cf, rocksdb::Options::default());
-                    }
-                }
-                Some(opts) => {
-                    self.needed_cf_opts.insert(cf, opts);
-                }
-            }
-            Ok(self)
-        })
-    }
+    type BuildFuture = waaa::BoxFuture<'static, Result<RocksDb, IndexError<Error, anyhow::Error>>>;
 
-    fn build_index_cf<I: ?Sized + sakuhiki_core::Indexer<Self::Target>>(
-        mut self,
-        index: &I,
-    ) -> waaa::BoxFuture<
-        '_,
-        Result<Self, IndexError<<Self::Target as Backend>::Error, <I::Datum as Datum>::Error>>,
-    > {
-        todo!() // TODO(high)
-    }
-
-    fn drop_unknown_cfs(self) -> waaa::BoxFuture<'static, Result<RocksDbBuilder, Error>> {
-        todo!() // TODO(high)
-    }
-
-    type BuildFuture =
-        waaa::BoxFuture<'static, Result<Db<Self::Target>, IndexError<Error, anyhow::Error>>>;
-
-    fn build(self) -> Self::BuildFuture {
+    fn build(self, config: BuilderConfig<RocksDb>) -> Self::BuildFuture {
         todo!() // TODO(high)
 
         /*
