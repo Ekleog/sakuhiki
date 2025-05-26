@@ -92,17 +92,17 @@ where
         transaction
             .take_exclusive_lock(datum_cf)
             .await
-            .map_err(|e| IndexError::Backend(CfError::new(datum_cf.name(), e)))?,
+            .map_err(|e| IndexError::cf(datum_cf.name(), e))?,
     );
     for cf in index_cfs {
         transaction
             .clear(cf)
             .await
-            .map_err(|e| IndexError::Backend(CfError::new(cf.name(), e)))?;
+            .map_err(|e| IndexError::cf(cf.name(), e))?;
     }
     let mut all_data = transaction.scan::<[u8]>(datum_cf, ..);
     while let Some(d) = all_data.next().await {
-        let (key, datum) = d.map_err(|e| IndexError::Backend(CfError::new(datum_cf.name(), e)))?;
+        let (key, datum) = d.map_err(|e| IndexError::cf(datum_cf.name(), e))?;
         this.index_from_slice(key.as_ref(), datum.as_ref(), transaction, index_cfs)
             .await?;
     }

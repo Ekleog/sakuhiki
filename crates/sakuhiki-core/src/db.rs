@@ -82,7 +82,7 @@ where
                 self.backend
                     .cf_handle(cf)
                     .await
-                    .map_err(|e| IndexError::Backend(CfError::new(cf, e)))
+                    .map_err(|e| IndexError::Backend(CfError::cf(cf, e)))
             })
             .try_collect::<Vec<_>>()
             .await?;
@@ -90,7 +90,7 @@ where
             self.backend
                 .cf_handle(I::Datum::CF)
                 .await
-                .map_err(|e| IndexError::Backend(CfError::new(I::Datum::CF, e)))?,
+                .map_err(|e| IndexError::Backend(CfError::cf(I::Datum::CF, e)))?,
         );
         let all_cfs = all_cfs.iter().collect::<Vec<_>>();
         self.backend
@@ -112,7 +112,7 @@ where
                 .backend
                 .cf_handle(D::CF)
                 .await
-                .map_err(|e| CfError::new(D::CF, e))?,
+                .map_err(|e| CfError::cf(D::CF, e))?,
             indexes_cfs: stream::iter(D::INDEXES)
                 .then(|i| {
                     stream::iter(i.cfs())
@@ -120,7 +120,7 @@ where
                             self.backend
                                 .cf_handle(cf)
                                 .await
-                                .map_err(|error| CfError { cf, error })
+                                .map_err(|error| CfError::cf(cf, error))
                         })
                         .try_collect()
                 })
@@ -197,7 +197,7 @@ where
             .transaction
             .put(&cf.datum_cf, key, value)
             .await
-            .map_err(|e| IndexError::backend(cf.datum_cf.name(), e))?;
+            .map_err(|e| IndexError::cf(cf.datum_cf.name(), e))?;
         for (i, cfs) in D::INDEXES.iter().zip(cf.indexes_cfs.iter()) {
             if let Some(old) = &old {
                 i.unindex_from_slice(key, old.as_ref(), &self.transaction, cfs)
@@ -222,7 +222,7 @@ where
             .transaction
             .delete(&cf.datum_cf, key)
             .await
-            .map_err(|e| IndexError::backend(cf.datum_cf.name(), e))?;
+            .map_err(|e| IndexError::cf(cf.datum_cf.name(), e))?;
         if let Some(old) = &old {
             for (i, cfs) in D::INDEXES.iter().zip(cf.indexes_cfs.iter()) {
                 i.unindex_from_slice(key, old.as_ref(), &self.transaction, cfs)

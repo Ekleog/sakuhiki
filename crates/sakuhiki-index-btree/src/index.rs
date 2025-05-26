@@ -45,7 +45,7 @@ where
                 transaction
                     .put(&cfs[0], &key, &[])
                     .await
-                    .map_err(|e| CfError::new(cfs[0].name(), e))?;
+                    .map_err(|e| CfError::cf(cfs[0].name(), e))?;
             }
             Ok(())
         })
@@ -66,7 +66,7 @@ where
                 transaction
                     .put(&cfs[0], &key, &[])
                     .await
-                    .map_err(|e| CfError::new(cfs[0].name(), e))?;
+                    .map_err(|e| CfError::cf(cfs[0].name(), e))?;
             }
             Ok(())
         })
@@ -98,7 +98,7 @@ where
                 transaction
                     .put(&cfs[0], &key, &[])
                     .await
-                    .map_err(|e| IndexError::Backend(CfError::new(cfs[0].name(), e)))?;
+                    .map_err(|e| IndexError::Backend(CfError::cf(cfs[0].name(), e)))?;
             }
             Ok(())
         })
@@ -127,7 +127,7 @@ where
                 transaction
                     .put(&cfs[0], &key, &[])
                     .await
-                    .map_err(|e| IndexError::Backend(CfError::new(cfs[0].name(), e)))?;
+                    .map_err(|e| IndexError::Backend(CfError::cf(cfs[0].name(), e)))?;
             }
             Ok(())
         })
@@ -184,7 +184,7 @@ where
             (Self::QueryKey<'op>, B::Value<'op>),
             CfError<B::Error>,
         > {
-            let (index_key, _) = res.map_err(|e| CfError::new(cfs[0].name(), e))?;
+            let (index_key, _) = res.map_err(|e| CfError::cf(cfs[0].name(), e))?;
             let key_len = self.key.key_len(index_key.as_ref());
             let object_key = BTreeQueryKey {
                 key: index_key,
@@ -193,7 +193,7 @@ where
             let object_value = transaction
                 .get(object_cf, object_key.as_ref())
                 .await
-                .map_err(|e| CfError::new(object_cf.name(), e))?
+                .map_err(|e| CfError::cf(object_cf.name(), e))?
                 .expect("Object was present in index but not in real table");
             Ok((object_key, object_value))
         };

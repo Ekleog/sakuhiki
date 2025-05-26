@@ -77,7 +77,7 @@ impl Backend for MemDb {
                 let cf = self
                     .db
                     .get(*name)
-                    .ok_or_else(|| CfError::new(name, Error::NonExistentColumnFamily))?;
+                    .ok_or_else(|| CfError::cf(name, Error::NonExistentColumnFamily))?;
                 let cf = Mutex::new(cf.lock().await);
                 transaction_cfs.push((i, TransactionCf { name, cf }));
             }

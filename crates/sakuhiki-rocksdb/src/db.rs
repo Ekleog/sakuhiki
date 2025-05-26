@@ -42,10 +42,7 @@ impl RocksDb {
             ) -> waaa::BoxFuture<'t, Ret>,
     {
         Box::pin(async move {
-            let t = self
-                .start_transaction(rw)
-                .await
-                .map_err(|err| CfError::new("", err))?; // TODO(high): should be MaybeCfError
+            let t = self.start_transaction(rw).await.map_err(CfError::backend)?;
             let cfs = cfs.iter().map(|cf| (**cf).clone()).collect();
             Ok((actions)(&(), t, cfs).await)
         })
