@@ -1,5 +1,6 @@
 use crate::{Backend, CfError, Indexer};
 
+// TODO(med): add FTS with eg. sakuhiki-index-tantivy?
 pub trait Index<B: Backend>: 'static + Indexer<B> {
     type Query<'q>;
     type QueryKey<'k>: AsRef<[u8]>;

@@ -7,6 +7,8 @@ use waaa::Future;
 
 use crate::{CfError, Db, IndexedDatum};
 
+// TODO(low): add OpenDAL-based backend
+// TODO(low): add cache backend that has two backend layers?
 pub trait Transaction<'t, B: ?Sized + Backend>
 where
     Self: 't,
