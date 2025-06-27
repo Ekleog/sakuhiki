@@ -1,6 +1,8 @@
 use crate::{Backend, CfError, Indexer};
 
 // TODO(med): add FTS with eg. sakuhiki-index-tantivy?
+// See https://github.com/quickwit-oss/tantivy/issues/2659 for the doability
+// Unfortunately that might require having not only KV but also an object store
 pub trait Index<B: Backend>: 'static + Indexer<B> {
     type Query<'q>;
     type QueryKey<'k>: AsRef<[u8]>;
