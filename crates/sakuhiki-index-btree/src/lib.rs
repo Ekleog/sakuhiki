@@ -1,5 +1,5 @@
 mod fixed_len;
-pub use fixed_len::FixedLenKey;
+pub use fixed_len::{FixedLenKey, FixedLenKeyExtractorFromSlice};
 
 mod index;
 pub use index::BTreeIndex;

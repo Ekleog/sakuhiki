@@ -2,14 +2,16 @@ use sakuhiki_core::Datum;
 
 use crate::Key;
 
+pub type FixedLenKeyExtractor<D> = fn(&D, &mut [u8]) -> bool;
+pub type FixedLenKeyExtractorFromSlice = fn(&[u8], &mut [u8]) -> eyre::Result<bool>;
+
 pub struct FixedLenKey<D>
 where
     D: Datum,
 {
     len: usize,
-    extractor: fn(&D, &mut [u8]) -> bool,
-    #[allow(clippy::type_complexity)]
-    extractor_from_slice: Option<fn(&[u8], &mut [u8]) -> eyre::Result<bool>>,
+    extractor: FixedLenKeyExtractor<D>,
+    extractor_from_slice: Option<FixedLenKeyExtractorFromSlice>,
 }
 
 impl<D> FixedLenKey<D>
@@ -17,11 +19,10 @@ where
     D: Datum,
 {
     /// `extractor` extracts from `&D` into `&mut [u8]
-    #[allow(clippy::type_complexity)]
     pub const fn new(
         len: usize,
-        extractor: fn(&D, &mut [u8]) -> bool,
-        extractor_from_slice: Option<fn(&[u8], &mut [u8]) -> eyre::Result<bool>>,
+        extractor: FixedLenKeyExtractor<D>,
+        extractor_from_slice: Option<FixedLenKeyExtractorFromSlice>,
     ) -> Self {
         Self {
             len,
