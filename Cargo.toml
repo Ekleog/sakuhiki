@@ -15,7 +15,7 @@ description = "Indexing overlay for any key-value store"
 edition = "2024"
 homepage = "https://github.com/Ekleog/sakuhiki"
 keywords = ["database", "async", "web", "native"]
-license = "MIT OR Apache-2.0"
+license = "AGPL-3.0"
 readme = "./README.md"
 repository = "https://github.com/Ekleog/sakuhiki"
 # Remember to update the ci.yml file when updating this
