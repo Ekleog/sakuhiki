@@ -7,9 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.0.1-alpha.1](https://github.com/Ekleog/sakuhiki/compare/sakuhiki-v0.0.1-alpha.0...sakuhiki-v0.0.1-alpha.1) - 2025-06-30
+## [0.0.1-alpha.1](https://github.com/Ekleog/sakuhiki/compare/sakuhiki-core-v0.0.1-alpha.0...sakuhiki-core-v0.0.1-alpha.1) - 2025-06-30
+
+### Added
+
+- replace custom errors with eyre, making all the types much simpler
 
 ### Other
 
-- cleanup noise in initial release's changelog
-- release v0.0.1-alpha.0 ([#1](https://github.com/Ekleog/sakuhiki/pull/1))
+- expand on todo
+- log todos
