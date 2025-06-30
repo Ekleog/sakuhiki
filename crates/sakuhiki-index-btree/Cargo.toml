@@ -15,7 +15,7 @@ rust-version.workspace = true
 [dependencies]
 sakuhiki-core.workspace = true
 
-anyhow.workspace = true
+eyre.workspace = true
 futures-util.workspace = true
 waaa.workspace = true
 

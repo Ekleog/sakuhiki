@@ -1,11 +1,12 @@
 use std::{collections::VecDeque, iter, ops::RangeBounds};
 // TODO(blocked): use AsyncFn everywhere possible, once its return future can be marked Send/Sync
 
+use eyre::WrapErr as _;
 use futures_util::{StreamExt as _, TryStreamExt as _, stream};
 use waaa::Stream;
 
 use crate::{
-    Backend, CfError, Datum, IndexError, IndexedDatum, Indexer,
+    Backend, CfOperationError, Datum, IndexedDatum, Indexer,
     backend::{BackendCf as _, Transaction as _},
 };
 
@@ -19,7 +20,7 @@ macro_rules! make_transaction_fn {
             &'fut self,
             cfs: &'fut [&'fut Cf<'fut, B>; CFS],
             actions: F,
-        ) -> Result<Ret, CfError<B::Error>>
+        ) -> eyre::Result<Ret>
         where
             F: 'fut
                 + waaa::Send
@@ -53,7 +54,7 @@ macro_rules! make_transaction_fn {
                     }
                     debug_assert!(backend_cfs.is_empty());
                     let Ok(frontend_cfs) = frontend_cfs.try_into() else {
-                        panic!("unexpected number of cfs");
+                        unreachable!("unexpected number of cfs");
                     };
                     actions(Transaction { transaction }, frontend_cfs)
                 })
@@ -73,16 +74,13 @@ where
     /// Rebuild an index from scratch.
     ///
     /// This can help recover from data corruption.
-    pub async fn rebuild_index<I: Indexer<B>>(
-        &self,
-        index: &'static I,
-    ) -> Result<(), IndexError<B::Error, <I::Datum as Datum>::Error>> {
+    pub async fn rebuild_index<I: Indexer<B>>(&self, index: &'static I) -> eyre::Result<()> {
         let mut all_cfs = stream::iter(index.cfs())
             .then(|cf| async move {
                 self.backend
                     .cf_handle(cf)
                     .await
-                    .map_err(|e| IndexError::Backend(CfError::cf(cf, e)))
+                    .wrap_err_with(|| CfOperationError::retrieving_cf(cf))
             })
             .try_collect::<Vec<_>>()
             .await?;
@@ -90,7 +88,7 @@ where
             self.backend
                 .cf_handle(I::Datum::CF)
                 .await
-                .map_err(|e| IndexError::Backend(CfError::cf(I::Datum::CF, e)))?,
+                .wrap_err_with(|| CfOperationError::retrieving_cf(I::Datum::CF))?,
         );
         let all_cfs = all_cfs.iter().collect::<Vec<_>>();
         self.backend
@@ -100,10 +98,10 @@ where
                 Box::pin(async move { index.rebuild(&t, &index_cfs, &datum_cf).await })
             })
             .await
-            .map_err(IndexError::Backend)?
+            .wrap_err("Failed running index rebuilding transaction")?
     }
 
-    pub async fn cf_handle<D>(&self) -> Result<Cf<'_, B>, CfError<B::Error>>
+    pub async fn cf_handle<D>(&self) -> eyre::Result<Cf<'_, B>>
     where
         D: IndexedDatum<B>,
     {
@@ -112,7 +110,7 @@ where
                 .backend
                 .cf_handle(D::CF)
                 .await
-                .map_err(|e| CfError::cf(D::CF, e))?,
+                .wrap_err_with(|| CfOperationError::retrieving_cf(D::CF))?,
             indexes_cfs: stream::iter(D::INDEXES)
                 .then(|i| {
                     stream::iter(i.cfs())
@@ -120,7 +118,7 @@ where
                             self.backend
                                 .cf_handle(cf)
                                 .await
-                                .map_err(|error| CfError::cf(cf, error))
+                                .wrap_err_with(|| CfOperationError::retrieving_cf(cf))
                         })
                         .try_collect()
                 })
@@ -164,7 +162,7 @@ where
         &'op self,
         cf: &'op TransactionCf<'t, B>,
         key: &'key [u8],
-    ) -> Result<Option<B::Value<'op>>, B::Error> {
+    ) -> eyre::Result<Option<B::Value<'op>>> {
         self.transaction.get(&cf.datum_cf, key).await
     }
 
@@ -172,8 +170,7 @@ where
         &'op self,
         cf: &'op TransactionCf<'t, B>,
         keys: Keys,
-    ) -> impl Stream<Item = Result<(B::Key<'op>, B::Value<'op>), B::Error>>
-    + use<'t, 'op, 'keys, B, Keys, R>
+    ) -> impl Stream<Item = eyre::Result<(B::Key<'op>, B::Value<'op>)>> + use<'t, 'op, 'keys, B, Keys, R>
     where
         'op: 'keys,
         Keys: 'keys + RangeBounds<R>,
@@ -183,12 +180,13 @@ where
     }
 
     // TODO(med): rename into put_slice, add put
+    // TODO(med): add sanity-check that the provided cf is the right one for D indeed, and same everywhere else
     pub async fn put<'op, 'kv, D>(
         &'op self,
         cf: &'op TransactionCf<'t, B>,
         key: &'kv [u8],
         value: &'kv [u8],
-    ) -> Result<Option<B::Value<'op>>, IndexError<B::Error, D::Error>>
+    ) -> eyre::Result<Option<B::Value<'op>>>
     where
         D: IndexedDatum<B>,
     {
@@ -197,14 +195,18 @@ where
             .transaction
             .put(&cf.datum_cf, key, value)
             .await
-            .map_err(|e| IndexError::cf(cf.datum_cf.name(), e))?;
+            .wrap_err_with(|| {
+                CfOperationError::new("Failed putting value into", cf.datum_cf.name())
+            })?;
         for (i, cfs) in D::INDEXES.iter().zip(cf.indexes_cfs.iter()) {
             if let Some(old) = &old {
                 i.unindex_from_slice(key, old.as_ref(), &self.transaction, cfs)
-                    .await?;
+                    .await
+                    .wrap_err("Failed unindexing old value")?;
             }
             i.index_from_slice(key, value, &self.transaction, cfs)
-                .await?;
+                .await
+                .wrap_err("Failed indexing new value")?;
         }
         Ok(old)
     }
@@ -213,7 +215,7 @@ where
         &'op self,
         cf: &'op TransactionCf<'t, B>,
         key: &'key [u8],
-    ) -> Result<Option<B::Value<'op>>, IndexError<B::Error, D::Error>>
+    ) -> eyre::Result<Option<B::Value<'op>>>
     where
         D: IndexedDatum<B>,
     {
@@ -222,11 +224,12 @@ where
             .transaction
             .delete(&cf.datum_cf, key)
             .await
-            .map_err(|e| IndexError::cf(cf.datum_cf.name(), e))?;
+            .wrap_err_with(|| CfOperationError::new("Failed deleting from", cf.datum_cf.name()))?;
         if let Some(old) = &old {
             for (i, cfs) in D::INDEXES.iter().zip(cf.indexes_cfs.iter()) {
                 i.unindex_from_slice(key, old.as_ref(), &self.transaction, cfs)
-                    .await?;
+                    .await
+                    .wrap_err("Failed unindexing old value")?;
             }
         }
         Ok(old)

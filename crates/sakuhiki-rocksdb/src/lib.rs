@@ -9,7 +9,7 @@ mod transaction;
 pub use builder::RocksDbBuilder;
 pub use cf::TransactionCf;
 pub use db::RocksDb;
-pub use error::{Error, ErrorKind, Result};
+pub use error::Error;
 pub use transaction::Transaction;
 
 // TODO(med): comparative testing and fuzzing

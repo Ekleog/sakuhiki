@@ -1,61 +1,31 @@
+//! TODO(med): properly document errors: we return eyre::Report, which can be downcast to:
+//! - `Backend::Error` or `Index::Error` if applicable
+//! - `CfOperationError` if it was operating on a specific column family
+//! - `Error` always to retrieve the backend-abstracted broad category (TODO(med): this is not implemented yet)
+
 use std::fmt;
 
-#[derive(Debug, thiserror::Error)]
-pub struct CfError<E> {
-    pub cf: Option<&'static str>,
-
-    #[source]
-    pub error: E,
+pub struct CfOperationError {
+    msg: &'static str,
+    cf: &'static str,
 }
 
-impl<E> fmt::Display for CfError<E> {
+impl CfOperationError {
+    pub fn new(msg: &'static str, cf: &'static str) -> Self {
+        Self { msg, cf }
+    }
+
+    pub fn retrieving_cf(cf: &'static str) -> Self {
+        Self::new("Failed retrieving CF handle for", cf)
+    }
+
+    pub fn cf(&self) -> &'static str {
+        self.cf
+    }
+}
+
+impl fmt::Display for CfOperationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.cf {
-            Some(cf) => {
-                f.write_str("Failed operation on cf")?;
-                cf.fmt(f)?;
-            }
-            None => {
-                f.write_str("Failed database operation")?;
-            }
-        }
-        Ok(())
-    }
-}
-
-// TODO(high): figure out a better name, now that the cf is optional
-impl<E> CfError<E> {
-    pub fn cf(cf: &'static str, error: E) -> Self {
-        Self {
-            cf: Some(cf),
-            error,
-        }
-    }
-
-    pub fn backend(error: E) -> Self {
-        Self { cf: None, error }
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum IndexError<B, D> {
-    #[error(transparent)]
-    Backend(CfError<B>),
-
-    #[error(transparent)]
-    Parsing(D),
-}
-
-impl<B, D> IndexError<B, D> {
-    pub fn backend(error: B) -> Self {
-        Self::Backend(CfError::backend(error))
-    }
-
-    pub fn cf(cf: &'static str, error: B) -> Self {
-        Self::Backend(CfError::cf(cf, error))
-    }
-
-    pub fn parsing(error: D) -> Self {
-        Self::Parsing(error)
+        write!(f, "{} ‘{}’", self.msg, self.cf)
     }
 }

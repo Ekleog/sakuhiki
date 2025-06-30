@@ -2,7 +2,7 @@ use std::{ops::RangeBounds, sync::Mutex};
 
 use sakuhiki_core::Backend;
 
-use crate::{Error, RocksDb, TransactionCf};
+use crate::{RocksDb, TransactionCf};
 
 pub struct Transaction<'t> {
     transaction: Mutex<rocksdb::Transaction<'t, rocksdb::TransactionDB>>,
@@ -27,7 +27,7 @@ impl<'t> sakuhiki_core::backend::Transaction<'t, RocksDb> for Transaction<'t> {
     fn take_exclusive_lock<'op>(
         &'op self,
         _cf: &'op <RocksDb as Backend>::TransactionCf<'t>,
-    ) -> waaa::BoxFuture<'op, Result<Self::ExclusiveLock<'op>, <RocksDb as Backend>::Error>>
+    ) -> waaa::BoxFuture<'op, eyre::Result<Self::ExclusiveLock<'op>>>
     where
         't: 'op,
     {
@@ -38,7 +38,7 @@ impl<'t> sakuhiki_core::backend::Transaction<'t, RocksDb> for Transaction<'t> {
         &'op self,
         cf: &'op TransactionCf<'t>,
         key: &'key [u8],
-    ) -> waaa::BoxFuture<'key, Result<Option<Vec<u8>>, Error>>
+    ) -> waaa::BoxFuture<'key, eyre::Result<Option<Vec<u8>>>>
     where
         'op: 'key,
     {
@@ -49,7 +49,7 @@ impl<'t> sakuhiki_core::backend::Transaction<'t, RocksDb> for Transaction<'t> {
         &'op self,
         cf: &'op TransactionCf<'t>,
         keys: impl 'keys + RangeBounds<R>,
-    ) -> waaa::BoxStream<'keys, Result<(Vec<u8>, Vec<u8>), Error>>
+    ) -> waaa::BoxStream<'keys, eyre::Result<(Vec<u8>, Vec<u8>)>>
     where
         't: 'op,
         'op: 'keys,
@@ -63,7 +63,7 @@ impl<'t> sakuhiki_core::backend::Transaction<'t, RocksDb> for Transaction<'t> {
         cf: &'op TransactionCf<'t>,
         key: &'kv [u8],
         value: &'kv [u8],
-    ) -> waaa::BoxFuture<'kv, Result<Option<Vec<u8>>, Error>>
+    ) -> waaa::BoxFuture<'kv, eyre::Result<Option<Vec<u8>>>>
     where
         't: 'op,
         'op: 'kv,
@@ -75,7 +75,7 @@ impl<'t> sakuhiki_core::backend::Transaction<'t, RocksDb> for Transaction<'t> {
         &'op self,
         cf: &'op TransactionCf<'t>,
         key: &'key [u8],
-    ) -> waaa::BoxFuture<'key, Result<Option<Vec<u8>>, Error>>
+    ) -> waaa::BoxFuture<'key, eyre::Result<Option<Vec<u8>>>>
     where
         't: 'op,
         'op: 'key,
@@ -86,7 +86,7 @@ impl<'t> sakuhiki_core::backend::Transaction<'t, RocksDb> for Transaction<'t> {
     fn clear<'op>(
         &'op self,
         cf: &'op <RocksDb as Backend>::TransactionCf<'t>,
-    ) -> waaa::BoxFuture<'op, Result<(), <RocksDb as Backend>::Error>> {
+    ) -> waaa::BoxFuture<'op, eyre::Result<()>> {
         todo!() // TODO(high)
     }
 }

@@ -9,7 +9,7 @@ where
     len: usize,
     extractor: fn(&D, &mut [u8]) -> bool,
     #[allow(clippy::type_complexity)]
-    extractor_from_slice: Option<fn(&[u8], &mut [u8]) -> Result<bool, D::Error>>,
+    extractor_from_slice: Option<fn(&[u8], &mut [u8]) -> eyre::Result<bool>>,
 }
 
 impl<D> FixedLenKey<D>
@@ -21,7 +21,7 @@ where
     pub const fn new(
         len: usize,
         extractor: fn(&D, &mut [u8]) -> bool,
-        extractor_from_slice: Option<fn(&[u8], &mut [u8]) -> Result<bool, D::Error>>,
+        extractor_from_slice: Option<fn(&[u8], &mut [u8]) -> eyre::Result<bool>>,
     ) -> Self {
         Self {
             len,
@@ -48,11 +48,11 @@ where
         (self.extractor)(datum, &mut key[len..])
     }
 
-    fn len_hint_from_slice(&self, _: &[u8]) -> Result<usize, D::Error> {
+    fn len_hint_from_slice(&self, _: &[u8]) -> eyre::Result<usize> {
         Ok(self.len)
     }
 
-    fn extract_key_from_slice(&self, slice: &[u8], key: &mut Vec<u8>) -> Result<bool, D::Error> {
+    fn extract_key_from_slice(&self, slice: &[u8], key: &mut Vec<u8>) -> eyre::Result<bool> {
         let len = key.len();
         key.resize(len + self.len, 0);
         if let Some(extractor_from_slice) = self.extractor_from_slice {

@@ -28,10 +28,10 @@ sakuhiki-indexed-db = { path = "crates/sakuhiki-indexed-db", version = "0.0.1-al
 sakuhiki-memdb = { path = "crates/sakuhiki-memdb", version = "0.0.1-alpha.0" }
 sakuhiki-rocksdb = { path = "crates/sakuhiki-rocksdb", version = "0.0.1-alpha.0" }
 
-anyhow = "1.0"
 async-lock = "3.4"
 async-stream = "0.3.6"
 derive_more = { version = "2.0", features = ["display"] }
+eyre = "0.6.12"
 futures-util = "0.3.31"
 indexed-db = "0.4.2"
 rocksdb = "0.23.0"

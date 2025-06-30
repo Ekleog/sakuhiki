@@ -1,5 +1,4 @@
-use std::io;
-
+use eyre::eyre;
 use sakuhiki_core::{Backend, Datum as _, Indexer};
 
 use crate::*;
@@ -25,13 +24,9 @@ impl Datum {
 
 impl sakuhiki_core::Datum for Datum {
     const CF: &'static str = "datum";
-    type Error = io::Error;
-    fn from_slice(datum: &[u8]) -> Result<Self, Self::Error> {
+    fn from_slice(datum: &[u8]) -> eyre::Result<Self> {
         if datum.len() != 8 {
-            return Err(io::Error::other(format!(
-                "expected 8-long slice, got {} bytes",
-                datum.len()
-            )));
+            return Err(eyre!("expected 8-long slice, got {} bytes", datum.len()));
         }
         Ok(Self {
             foo: u32::from_be_bytes(datum[..4].try_into().unwrap()),

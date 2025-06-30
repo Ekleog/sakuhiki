@@ -3,10 +3,11 @@ use std::{
     path::Path,
 };
 
-use sakuhiki_core::{Backend, CfError, backend::Builder};
+use eyre::WrapErr as _;
+use sakuhiki_core::{Backend, backend::Builder};
 use tokio::task::block_in_place;
 
-use crate::{Error, ErrorKind, RocksDbBuilder, Transaction, TransactionCf};
+use crate::{Error, RocksDbBuilder, Transaction, TransactionCf};
 
 pub struct RocksDb {
     db: rocksdb::TransactionDB<rocksdb::SingleThreaded>,
@@ -21,7 +22,7 @@ impl RocksDb {
         RocksDb { db }
     }
 
-    pub(crate) async fn start_transaction(&self, rw: bool) -> crate::Result<Transaction<'_>> {
+    pub(crate) async fn start_transaction(&self, rw: bool) -> eyre::Result<Transaction<'_>> {
         let t = block_in_place(|| self.db.transaction());
         Ok(Transaction::new(t, rw))
     }
@@ -31,7 +32,7 @@ impl RocksDb {
         rw: bool,
         cfs: &'fut [&'fut TransactionCf<'db>],
         actions: F,
-    ) -> waaa::BoxFuture<'fut, Result<Ret, CfError<Error>>>
+    ) -> waaa::BoxFuture<'fut, eyre::Result<Ret>>
     where
         F: 'fut
             + waaa::Send
@@ -42,7 +43,10 @@ impl RocksDb {
             ) -> waaa::BoxFuture<'t, Ret>,
     {
         Box::pin(async move {
-            let t = self.start_transaction(rw).await.map_err(CfError::backend)?;
+            let t = self
+                .start_transaction(rw)
+                .await
+                .wrap_err("Failed starting transaction")?;
             let cfs = cfs.iter().map(|cf| (**cf).clone()).collect();
             Ok((actions)(&(), t, cfs).await)
         })
@@ -51,17 +55,15 @@ impl RocksDb {
 
 #[warn(clippy::missing_trait_methods)] // TODO(med): should set that at crate level
 impl Backend for RocksDb {
-    type Error = Error;
-
     type Builder = RocksDbBuilder;
 
     type Cf<'db> = TransactionCf<'db>;
 
-    type CfHandleFuture<'op> = Ready<Result<Self::Cf<'op>, Self::Error>>;
+    type CfHandleFuture<'op> = Ready<eyre::Result<Self::Cf<'op>>>;
 
     fn cf_handle<'db>(&'db self, name: &'static str) -> Self::CfHandleFuture<'db> {
         let result = block_in_place(|| self.db.cf_handle(name))
-            .ok_or_else(|| Error::simple(ErrorKind::NoSuchCf(name)))
+            .ok_or_else(|| eyre::Report::from(Error::NoSuchCf(name)))
             .map(|cf| TransactionCf::new(name, cf));
         future::ready(result)
     }
@@ -73,7 +75,7 @@ impl Backend for RocksDb {
         &'fut self,
         cfs: &'fut [&'fut Self::Cf<'db>],
         actions: F,
-    ) -> waaa::BoxFuture<'fut, Result<Ret, CfError<Self::Error>>>
+    ) -> waaa::BoxFuture<'fut, eyre::Result<Ret>>
     where
         F: 'fut
             + waaa::Send
@@ -90,7 +92,7 @@ impl Backend for RocksDb {
         &'fut self,
         cfs: &'fut [&'fut Self::Cf<'db>],
         actions: F,
-    ) -> waaa::BoxFuture<'fut, Result<Ret, CfError<Self::Error>>>
+    ) -> waaa::BoxFuture<'fut, eyre::Result<Ret>>
     where
         F: 'fut
             + waaa::Send

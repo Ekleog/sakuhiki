@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::Context as _;
+use eyre::WrapErr as _;
 use rocksdb::{ColumnFamilyDescriptor, SingleThreaded};
 use sakuhiki_core::{
     Backend as _, BackendBuilder,
@@ -50,7 +50,7 @@ impl RocksDbBuilder {
         self,
         mut cfs: HashMap<&'static str, CfOptions<RocksDb>>,
         drop_unknown_cfs: bool,
-    ) -> anyhow::Result<(RocksDb, HashSet<&'static str>)> {
+    ) -> eyre::Result<(RocksDb, HashSet<&'static str>)> {
         let path_d = self.path.display();
 
         // List pre-existing CFs
@@ -60,7 +60,7 @@ impl RocksDbBuilder {
             true,
             rocksdb::Cache::new_lru_cache(1024),
         )
-        .with_context(|| format!("Failed listing CFs for {path_d}"))?;
+        .wrap_err_with(|| format!("Failed listing CFs for {path_d}"))?;
 
         // Prepare opening configuration
         let mut opened_unknown_cfs = HashSet::new();
@@ -83,13 +83,13 @@ impl RocksDbBuilder {
             &self.path,
             preexisting_cfs,
         )
-        .with_context(|| format!("Failed opening database {path_d}"))?;
+        .wrap_err_with(|| format!("Failed opening database {path_d}"))?;
 
         // Drop unknown CFs
         if drop_unknown_cfs {
             for cf in opened_unknown_cfs {
                 db.drop_cf(&cf)
-                    .with_context(|| format!("Dropping unknown CF {cf}"))?;
+                    .wrap_err_with(|| format!("Dropping unknown CF {cf}"))?;
             }
         }
 
@@ -104,7 +104,7 @@ impl RocksDbBuilder {
                 }
             };
             db.create_cf(cf, &options)
-                .with_context(|| format!("Creating new CF {cf}"))?;
+                .wrap_err_with(|| format!("Creating new CF {cf}"))?;
             created_cfs.insert(cf);
         }
 
@@ -116,7 +116,7 @@ impl BackendBuilder for RocksDbBuilder {
     type Target = RocksDb;
     type CfOptions = rocksdb::Options;
 
-    type BuildFuture = waaa::BoxFuture<'static, anyhow::Result<RocksDb>>;
+    type BuildFuture = waaa::BoxFuture<'static, eyre::Result<RocksDb>>;
 
     fn build(self, mut config: BuilderConfig<RocksDb>) -> Self::BuildFuture {
         Box::pin(async move {
@@ -125,7 +125,7 @@ impl BackendBuilder for RocksDbBuilder {
                 self.blocking_build_without_index_rebuilding(config.cfs, config.drop_unknown_cfs)
             })
             .await
-            .with_context(|| {
+            .wrap_err_with(|| {
                 format!("Failed joining task that builds the database for {path_d}")
             })??;
 
@@ -137,19 +137,19 @@ impl BackendBuilder for RocksDbBuilder {
                     let datum_cf = db
                         .cf_handle(i.datum_cf)
                         .await
-                        .with_context(|| format!("Failed opening CF {}", i.datum_cf))?;
+                        .wrap_err_with(|| format!("Failed opening CF {}", i.datum_cf))?;
                     let mut index_cfs = Vec::with_capacity(i.index_cfs.len());
                     for cf in i.index_cfs {
                         index_cfs.push(
                             db.cf_handle(cf)
                                 .await
-                                .with_context(|| format!("Failed opening CF {}", i.datum_cf))?,
+                                .wrap_err_with(|| format!("Failed opening CF {}", i.datum_cf))?,
                         );
                     }
                     let t = db.start_transaction(true).await?;
                     (i.rebuilder)(&t, &index_cfs, &datum_cf)
                         .await
-                        .with_context(|| format!("Rebuilding index with CFs {:?}", i.index_cfs))?;
+                        .wrap_err_with(|| format!("Rebuilding index with CFs {:?}", i.index_cfs))?;
                 }
             }
 

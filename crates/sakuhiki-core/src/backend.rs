@@ -5,7 +5,7 @@ use std::{
 
 use waaa::Future;
 
-use crate::{CfError, Db, IndexedDatum};
+use crate::{Db, IndexedDatum};
 
 // TODO(low): add OpenDAL-based backend
 // TODO(low): add cache backend that has two backend layers?
@@ -21,7 +21,7 @@ where
     fn take_exclusive_lock<'op>(
         &'op self,
         cf: &'op B::TransactionCf<'t>,
-    ) -> waaa::BoxFuture<'op, Result<Self::ExclusiveLock<'op>, B::Error>>
+    ) -> waaa::BoxFuture<'op, eyre::Result<Self::ExclusiveLock<'op>>>
     where
         't: 'op;
 
@@ -29,29 +29,27 @@ where
         &'op self,
         cf: &'op B::TransactionCf<'t>,
         key: &'key [u8],
-    ) -> waaa::BoxFuture<'key, Result<Option<B::Value<'op>>, B::Error>>
+    ) -> waaa::BoxFuture<'key, eyre::Result<Option<B::Value<'op>>>>
     where
         't: 'op,
         'op: 'key;
 
     // TODO(low): do we need get_many / multi_get?
-    #[allow(clippy::type_complexity)] // No meaningful way to split the type
     fn scan<'op, 'keys, R>(
         &'op self,
         cf: &'op B::TransactionCf<'t>,
         keys: impl 'keys + RangeBounds<R>,
-    ) -> waaa::BoxStream<'keys, Result<(B::Key<'op>, B::Value<'op>), B::Error>>
+    ) -> waaa::BoxStream<'keys, eyre::Result<(B::Key<'op>, B::Value<'op>)>>
     where
         't: 'op,
         'op: 'keys,
         R: ?Sized + AsRef<[u8]>;
 
-    #[allow(clippy::type_complexity)]
     fn scan_prefix<'op, 'key>(
         &'op self,
         cf: &'op B::TransactionCf<'t>,
         prefix: &'key [u8],
-    ) -> waaa::BoxStream<'key, Result<(B::Key<'op>, B::Value<'op>), B::Error>>
+    ) -> waaa::BoxStream<'key, eyre::Result<(B::Key<'op>, B::Value<'op>)>>
     where
         't: 'op,
         'op: 'key,
@@ -81,7 +79,7 @@ where
         cf: &'op B::TransactionCf<'t>,
         key: &'kv [u8],
         value: &'kv [u8],
-    ) -> waaa::BoxFuture<'kv, Result<Option<B::Value<'op>>, B::Error>>
+    ) -> waaa::BoxFuture<'kv, eyre::Result<Option<B::Value<'op>>>>
     where
         't: 'op,
         'op: 'kv;
@@ -90,7 +88,7 @@ where
         &'op self,
         cf: &'op B::TransactionCf<'t>,
         key: &'key [u8],
-    ) -> waaa::BoxFuture<'key, Result<Option<B::Value<'op>>, B::Error>>
+    ) -> waaa::BoxFuture<'key, eyre::Result<Option<B::Value<'op>>>>
     where
         't: 'op,
         'op: 'key;
@@ -98,7 +96,7 @@ where
     fn clear<'op>(
         &'op self,
         cf: &'op B::TransactionCf<'t>,
-    ) -> waaa::BoxFuture<'op, Result<(), B::Error>>;
+    ) -> waaa::BoxFuture<'op, eyre::Result<()>>;
 }
 
 macro_rules! make_transaction_fn {
@@ -107,7 +105,7 @@ macro_rules! make_transaction_fn {
             &'fut self,
             cfs: &'fut [&'fut Self::Cf<'db>],
             actions: F,
-        ) -> waaa::BoxFuture<'fut, Result<Ret, CfError<Self::Error>>>
+        ) -> waaa::BoxFuture<'fut, eyre::Result<Ret>>
         where
             F: 'fut
                 + waaa::Send
@@ -120,13 +118,11 @@ macro_rules! make_transaction_fn {
 }
 
 pub trait Backend: 'static {
-    type Error: waaa::Send + waaa::Sync + std::error::Error;
-
     type Builder: BackendBuilder<Target = Self>;
 
     type Cf<'db>: waaa::Send + waaa::Sync;
 
-    type CfHandleFuture<'db>: waaa::Send + Future<Output = Result<Self::Cf<'db>, Self::Error>>;
+    type CfHandleFuture<'db>: waaa::Send + Future<Output = eyre::Result<Self::Cf<'db>>>;
 
     // Note: CF handles starting with `__sakuhiki` are reserved for implementation details.
     fn cf_handle<'db>(&'db self, name: &'static str) -> Self::CfHandleFuture<'db>;
@@ -149,7 +145,7 @@ pub trait BackendBuilder: 'static + Sized + Send {
     type Target: Backend;
     type CfOptions;
 
-    type BuildFuture: waaa::Send + Future<Output = anyhow::Result<Self::Target>>;
+    type BuildFuture: waaa::Send + Future<Output = eyre::Result<Self::Target>>;
 
     fn build(self, config: BuilderConfig<Self::Target>) -> Self::BuildFuture;
 }
@@ -170,7 +166,7 @@ pub struct IndexRebuilder<B: Backend> {
                 &'fut B::Transaction<'t>,
                 &'fut [B::TransactionCf<'t>],
                 &'fut B::TransactionCf<'t>,
-            ) -> waaa::BoxFuture<'fut, anyhow::Result<()>>,
+            ) -> waaa::BoxFuture<'fut, eyre::Result<()>>,
     >,
 }
 
@@ -259,14 +255,14 @@ impl<B: Backend> Builder<B> {
                 datum_cf: D::CF,
                 index_cfs: i.cfs(),
                 rebuilder: Box::new(move |t, index_cfs, datum_cf| {
-                    Box::pin(async move { Ok(i.rebuild(t, index_cfs, datum_cf).await?) })
+                    Box::pin(async move { i.rebuild(t, index_cfs, datum_cf).await })
                 }),
             });
         }
         self
     }
 
-    pub async fn build(&mut self) -> anyhow::Result<Db<B>> {
+    pub async fn build(&mut self) -> eyre::Result<Db<B>> {
         let mut config = self.config.take().expect("Reusing consumed builder");
         let builder = self.builder.take().expect("Reusing consumed builder");
         if self.require_all_cfs_configured {

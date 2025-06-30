@@ -15,8 +15,8 @@ rust-version.workspace = true
 [dependencies]
 sakuhiki-core.workspace = true
 
-anyhow.workspace = true
 derive_more.workspace = true
+eyre.workspace = true
 rocksdb.workspace = true
 tokio = { workspace = true, features = ["rt", "rt-multi-thread"] }
 thiserror.workspace = true

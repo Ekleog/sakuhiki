@@ -1,6 +1,7 @@
+use eyre::WrapErr as _;
 use futures_util::StreamExt as _;
 use sakuhiki_core::{
-    Backend, CfError, Datum, Index, IndexError, Indexer,
+    Backend, CfOperationError, Index, Indexer,
     backend::{BackendCf as _, Transaction as _},
     indexer,
 };
@@ -36,7 +37,7 @@ where
         datum: &'fut Self::Datum,
         transaction: &'fut B::Transaction<'t>,
         cfs: &'fut [B::TransactionCf<'t>],
-    ) -> waaa::BoxFuture<'fut, Result<(), CfError<B::Error>>> {
+    ) -> waaa::BoxFuture<'fut, eyre::Result<()>> {
         Box::pin(async move {
             let mut key = Vec::with_capacity(self.key.len_hint(datum) + object_key.len());
             let do_index = self.key.extract_key(datum, &mut key);
@@ -45,7 +46,9 @@ where
                 transaction
                     .put(&cfs[0], &key, &[])
                     .await
-                    .map_err(|e| CfError::cf(cfs[0].name(), e))?;
+                    .wrap_err_with(|| {
+                        CfOperationError::new("Failed putting key into", cfs[0].name())
+                    })?;
             }
             Ok(())
         })
@@ -57,16 +60,15 @@ where
         datum: &'fut Self::Datum,
         transaction: &'fut B::Transaction<'t>,
         cfs: &'fut [B::TransactionCf<'t>],
-    ) -> waaa::BoxFuture<'fut, Result<(), CfError<B::Error>>> {
+    ) -> waaa::BoxFuture<'fut, eyre::Result<()>> {
         Box::pin(async move {
             let mut key = Vec::with_capacity(self.key.len_hint(datum) + object_key.len());
-            let do_index = self.key.extract_key(datum, &mut key);
-            if do_index {
+            let do_unindex = self.key.extract_key(datum, &mut key);
+            if do_unindex {
                 key.extend(object_key);
-                transaction
-                    .put(&cfs[0], &key, &[])
-                    .await
-                    .map_err(|e| CfError::cf(cfs[0].name(), e))?;
+                transaction.delete(&cfs[0], &key).await.wrap_err_with(|| {
+                    CfOperationError::new("Failed deleting key from", cfs[0].name())
+                })?;
             }
             Ok(())
         })
@@ -78,27 +80,26 @@ where
         slice: &'fut [u8],
         transaction: &'fut B::Transaction<'t>,
         cfs: &'fut [B::TransactionCf<'t>],
-    ) -> waaa::BoxFuture<
-        'fut,
-        Result<(), IndexError<<B as Backend>::Error, <K::Datum as Datum>::Error>>,
-    > {
+    ) -> waaa::BoxFuture<'fut, eyre::Result<()>> {
         Box::pin(async move {
             let mut key = Vec::with_capacity(
                 self.key
                     .len_hint_from_slice(slice)
-                    .map_err(IndexError::Parsing)?
+                    .wrap_err("Failed estimating key length from slice")?
                     + object_key.len(),
             );
             let do_index = self
                 .key
                 .extract_key_from_slice(slice, &mut key)
-                .map_err(IndexError::Parsing)?;
+                .wrap_err("Failed extracting key from slice")?;
             if do_index {
                 key.extend(object_key);
                 transaction
                     .put(&cfs[0], &key, &[])
                     .await
-                    .map_err(|e| IndexError::Backend(CfError::cf(cfs[0].name(), e)))?;
+                    .wrap_err_with(|| {
+                        CfOperationError::new("Failed putting key into", cfs[0].name())
+                    })?;
             }
             Ok(())
         })
@@ -110,24 +111,23 @@ where
         slice: &'fut [u8],
         transaction: &'fut B::Transaction<'t>,
         cfs: &'fut [B::TransactionCf<'t>],
-    ) -> waaa::BoxFuture<'fut, Result<(), IndexError<B::Error, <K::Datum as Datum>::Error>>> {
+    ) -> waaa::BoxFuture<'fut, eyre::Result<()>> {
         Box::pin(async move {
             let mut key = Vec::with_capacity(
                 self.key
                     .len_hint_from_slice(slice)
-                    .map_err(IndexError::Parsing)?
+                    .wrap_err("Failed estimating key length")?
                     + object_key.len(),
             );
-            let do_index = self
+            let do_unindex = self
                 .key
                 .extract_key_from_slice(slice, &mut key)
-                .map_err(IndexError::Parsing)?;
-            if do_index {
+                .wrap_err("Failed extracting key from slice")?;
+            if do_unindex {
                 key.extend(object_key);
-                transaction
-                    .put(&cfs[0], &key, &[])
-                    .await
-                    .map_err(|e| IndexError::Backend(CfError::cf(cfs[0].name(), e)))?;
+                transaction.delete(&cfs[0], &key).await.wrap_err_with(|| {
+                    CfOperationError::new("Failed deleting key from", cfs[0].name())
+                })?;
             }
             Ok(())
         })
@@ -138,8 +138,7 @@ where
         transaction: &'fut B::Transaction<'t>,
         index_cfs: &'fut [B::TransactionCf<'t>],
         datum_cf: &'fut B::TransactionCf<'t>,
-    ) -> waaa::BoxFuture<'fut, Result<(), IndexError<B::Error, <Self::Datum as Datum>::Error>>>
-    {
+    ) -> waaa::BoxFuture<'fut, eyre::Result<()>> {
         Box::pin(async move {
             indexer::default_rebuild::<B, Self>(self, transaction, index_cfs, datum_cf).await
         })
@@ -178,13 +177,11 @@ where
         transaction: &'op B::Transaction<'t>,
         object_cf: &'op B::TransactionCf<'t>,
         cfs: &'op [B::TransactionCf<'t>],
-    ) -> waaa::BoxStream<'q, Result<(Self::QueryKey<'op>, B::Value<'op>), CfError<B::Error>>> {
-        #[allow(clippy::type_complexity)]
-        let on_each_result = async |res: Result<(B::Key<'op>, B::Value<'op>), B::Error>| -> Result<
-            (Self::QueryKey<'op>, B::Value<'op>),
-            CfError<B::Error>,
+    ) -> waaa::BoxStream<'q, eyre::Result<(Self::QueryKey<'op>, B::Value<'op>)>> {
+        let on_each_result = async |res: eyre::Result<(B::Key<'op>, B::Value<'op>)>| -> eyre::Result<
+            (Self::QueryKey<'op>, B::Value<'op>)
         > {
-            let (index_key, _) = res.map_err(|e| CfError::cf(cfs[0].name(), e))?;
+            let (index_key, _) = res.wrap_err_with(|| CfOperationError::new("Failed scanning", cfs[0].name()))?;
             let key_len = self.key.key_len(index_key.as_ref());
             let object_key = BTreeQueryKey {
                 key: index_key,
@@ -193,7 +190,7 @@ where
             let object_value = transaction
                 .get(object_cf, object_key.as_ref())
                 .await
-                .map_err(|e| CfError::cf(object_cf.name(), e))?
+            .wrap_err_with(|| CfOperationError::new("Failed getting object", object_cf.name()))?
                 .expect("Object was present in index but not in real table");
             Ok((object_key, object_value))
         };

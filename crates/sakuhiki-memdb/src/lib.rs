@@ -6,17 +6,12 @@ use std::{
 };
 
 use async_lock::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
+use eyre::{WrapErr as _, eyre};
 use futures_util::stream;
 use sakuhiki_core::{
-    Backend, CfError,
+    Backend, CfOperationError,
     backend::{BackendBuilder, BackendCf, Builder, BuilderConfig},
 };
-
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("Column family does not exist in memory database")]
-    NonExistentColumnFamily,
-}
 
 type ColumnFamily = BTreeMap<Vec<u8>, Vec<u8>>;
 
@@ -43,13 +38,11 @@ impl MemDb {
 
 #[warn(clippy::missing_trait_methods)]
 impl Backend for MemDb {
-    type Error = Error;
-
     type Builder = MemDbBuilder;
 
     type Cf<'db> = &'static str;
 
-    type CfHandleFuture<'op> = Ready<Result<Self::Cf<'op>, Self::Error>>;
+    type CfHandleFuture<'op> = Ready<eyre::Result<Self::Cf<'op>>>;
 
     fn cf_handle<'db>(&'db self, name: &'static str) -> Self::CfHandleFuture<'db> {
         ready(Ok(name))
@@ -62,7 +55,7 @@ impl Backend for MemDb {
         &'fut self,
         cfs: &'fut [&'fut Self::Cf<'db>],
         actions: F,
-    ) -> waaa::BoxFuture<'fut, Result<Ret, CfError<Self::Error>>>
+    ) -> waaa::BoxFuture<'fut, eyre::Result<Ret>>
     where
         F: 'fut
             + waaa::Send
@@ -74,10 +67,14 @@ impl Backend for MemDb {
             cfs.sort_by_key(|e| e.1);
             let mut transaction_cfs = Vec::with_capacity(cfs.len());
             for (i, &name) in cfs {
+                // TODO(med): this ok_or_else should definitely be a proper error type
                 let cf = self
                     .db
                     .get(*name)
-                    .ok_or_else(|| CfError::cf(name, Error::NonExistentColumnFamily))?;
+                    .ok_or_else(|| eyre!("Column family does not exist"))
+                    .wrap_err_with(|| {
+                        CfOperationError::new("Column family does not exist:", name)
+                    })?;
                 let cf = Mutex::new(cf.lock().await);
                 transaction_cfs.push((i, TransactionCf { name, cf }));
             }
@@ -94,7 +91,7 @@ impl Backend for MemDb {
         &'fut self,
         cfs: &'fut [&'fut Self::Cf<'db>],
         actions: F,
-    ) -> waaa::BoxFuture<'fut, Result<Ret, CfError<Self::Error>>>
+    ) -> waaa::BoxFuture<'fut, eyre::Result<Ret>>
     where
         F: 'fut
             + waaa::Send
@@ -125,7 +122,7 @@ impl<'t> sakuhiki_core::backend::Transaction<'t, MemDb> for Transaction {
     fn take_exclusive_lock<'op>(
         &'op self,
         _cf: &'op <MemDb as Backend>::TransactionCf<'t>,
-    ) -> waaa::BoxFuture<'op, Result<Self::ExclusiveLock<'op>, <MemDb as Backend>::Error>>
+    ) -> waaa::BoxFuture<'op, eyre::Result<Self::ExclusiveLock<'op>>>
     where
         't: 'op,
     {
@@ -137,7 +134,7 @@ impl<'t> sakuhiki_core::backend::Transaction<'t, MemDb> for Transaction {
         &'op self,
         cf: &'op TransactionCf<'t>,
         key: &'key [u8],
-    ) -> waaa::BoxFuture<'key, Result<Option<Vec<u8>>, Error>>
+    ) -> waaa::BoxFuture<'key, eyre::Result<Option<Vec<u8>>>>
     where
         'op: 'key,
     {
@@ -153,7 +150,7 @@ impl<'t> sakuhiki_core::backend::Transaction<'t, MemDb> for Transaction {
         &'op self,
         cf: &'op TransactionCf<'t>,
         keys: impl 'keys + RangeBounds<R>,
-    ) -> waaa::BoxStream<'keys, Result<(Vec<u8>, Vec<u8>), Error>>
+    ) -> waaa::BoxStream<'keys, eyre::Result<(Vec<u8>, Vec<u8>)>>
     where
         't: 'op,
         'op: 'keys,
@@ -176,7 +173,7 @@ impl<'t> sakuhiki_core::backend::Transaction<'t, MemDb> for Transaction {
         cf: &'op TransactionCf<'t>,
         key: &'kv [u8],
         value: &'kv [u8],
-    ) -> waaa::BoxFuture<'kv, Result<Option<Vec<u8>>, Error>>
+    ) -> waaa::BoxFuture<'kv, eyre::Result<Option<Vec<u8>>>>
     where
         't: 'op,
         'op: 'kv,
@@ -189,7 +186,7 @@ impl<'t> sakuhiki_core::backend::Transaction<'t, MemDb> for Transaction {
         &'op self,
         cf: &'op TransactionCf<'t>,
         key: &'key [u8],
-    ) -> waaa::BoxFuture<'key, Result<Option<Vec<u8>>, Error>>
+    ) -> waaa::BoxFuture<'key, eyre::Result<Option<Vec<u8>>>>
     where
         't: 'op,
         'op: 'key,
@@ -201,7 +198,7 @@ impl<'t> sakuhiki_core::backend::Transaction<'t, MemDb> for Transaction {
     fn clear<'op>(
         &'op self,
         cf: &'op <MemDb as Backend>::TransactionCf<'t>,
-    ) -> waaa::BoxFuture<'op, Result<(), <MemDb as Backend>::Error>> {
+    ) -> waaa::BoxFuture<'op, eyre::Result<()>> {
         cf.cf.lock().unwrap().clear();
         Box::pin(ready(Ok(())))
     }
@@ -215,7 +212,7 @@ impl BackendBuilder for MemDbBuilder {
     type Target = MemDb;
     type CfOptions = (); // TODO(blocked): should be !
 
-    type BuildFuture = waaa::BoxFuture<'static, anyhow::Result<Self::Target>>;
+    type BuildFuture = waaa::BoxFuture<'static, eyre::Result<Self::Target>>;
 
     fn build(self, config: BuilderConfig<MemDb>) -> Self::BuildFuture {
         Box::pin(async move {

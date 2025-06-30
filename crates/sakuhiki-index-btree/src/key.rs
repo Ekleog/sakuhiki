@@ -1,3 +1,4 @@
+use eyre::WrapErr as _;
 use sakuhiki_core::Datum;
 
 pub trait Key: 'static + waaa::Send + waaa::Sync {
@@ -14,18 +15,15 @@ pub trait Key: 'static + waaa::Send + waaa::Sync {
     /// Hint about the length of the key that will be extracted from `datum`.
     ///
     /// Used to preallocate capacity in `key` for the right size.
-    fn len_hint_from_slice(&self, datum: &[u8]) -> Result<usize, <Self::Datum as Datum>::Error> {
-        let datum = Self::Datum::from_slice(datum)?;
+    fn len_hint_from_slice(&self, datum: &[u8]) -> eyre::Result<usize> {
+        // TODO(med): should maybe replace most of the custom messages with proper variants of a sakuhiki_core::Error enum?
+        let datum = Self::Datum::from_slice(datum).wrap_err("Failed to parse datum")?;
         Ok(self.len_hint(&datum))
     }
 
     /// Returns `true` iff `datum` must be part of the index.
-    fn extract_key_from_slice(
-        &self,
-        datum: &[u8],
-        key: &mut Vec<u8>,
-    ) -> Result<bool, <Self::Datum as Datum>::Error> {
-        let datum = Self::Datum::from_slice(datum)?;
+    fn extract_key_from_slice(&self, datum: &[u8], key: &mut Vec<u8>) -> eyre::Result<bool> {
+        let datum = Self::Datum::from_slice(datum).wrap_err("Failed to parse datum")?;
         Ok(self.extract_key(&datum, key))
     }
 

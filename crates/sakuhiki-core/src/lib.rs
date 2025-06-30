@@ -10,7 +10,7 @@ mod db;
 pub use db::{Db, Transaction};
 
 mod errors;
-pub use errors::{CfError, IndexError};
+pub use errors::CfOperationError;
 
 mod index;
 pub use index::Index;

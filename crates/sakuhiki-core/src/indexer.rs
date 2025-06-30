@@ -1,7 +1,8 @@
+use eyre::WrapErr as _;
 use futures_util::StreamExt as _;
 
 use crate::{
-    Backend, CfError, Datum, IndexError,
+    Backend, CfOperationError, Datum,
     backend::{BackendCf as _, Transaction as _},
 };
 
@@ -16,7 +17,7 @@ pub trait Indexer<B: Backend>: Send + Sync {
         datum: &'fut Self::Datum,
         transaction: &'fut B::Transaction<'t>,
         cfs: &'fut [B::TransactionCf<'t>],
-    ) -> waaa::BoxFuture<'fut, Result<(), CfError<B::Error>>>;
+    ) -> waaa::BoxFuture<'fut, eyre::Result<()>>;
 
     fn unindex<'fut, 't>(
         &'fut self,
@@ -24,50 +25,44 @@ pub trait Indexer<B: Backend>: Send + Sync {
         datum: &'fut Self::Datum,
         transaction: &'fut B::Transaction<'t>,
         cfs: &'fut [B::TransactionCf<'t>],
-    ) -> waaa::BoxFuture<'fut, Result<(), CfError<B::Error>>>;
+    ) -> waaa::BoxFuture<'fut, eyre::Result<()>>;
 
-    #[allow(clippy::type_complexity)] // No good way to cut this smaller
     fn index_from_slice<'fut, 't>(
         &'fut self,
         object_key: &'fut [u8],
         slice: &'fut [u8],
         transaction: &'fut B::Transaction<'t>,
         cfs: &'fut [B::TransactionCf<'t>],
-    ) -> waaa::BoxFuture<'fut, Result<(), IndexError<B::Error, <Self::Datum as Datum>::Error>>>
-    {
+    ) -> waaa::BoxFuture<'fut, eyre::Result<()>> {
         Box::pin(async move {
-            let datum = Self::Datum::from_slice(slice).map_err(IndexError::Parsing)?;
+            let datum = Self::Datum::from_slice(slice).wrap_err("Failed to parse datum")?;
             self.index(object_key, &datum, transaction, cfs)
                 .await
-                .map_err(IndexError::Backend)
+                .wrap_err("Failed to index datum")
         })
     }
 
-    #[allow(clippy::type_complexity)] // No good way to cut this smaller
     fn unindex_from_slice<'fut, 't>(
         &'fut self,
         object_key: &'fut [u8],
         slice: &'fut [u8],
         transaction: &'fut B::Transaction<'t>,
         cfs: &'fut [B::TransactionCf<'t>],
-    ) -> waaa::BoxFuture<'fut, Result<(), IndexError<B::Error, <Self::Datum as Datum>::Error>>>
-    {
+    ) -> waaa::BoxFuture<'fut, eyre::Result<()>> {
         Box::pin(async move {
-            let datum = Self::Datum::from_slice(slice).map_err(IndexError::Parsing)?;
+            let datum = Self::Datum::from_slice(slice).wrap_err("Failed to parse datum")?;
             self.unindex(object_key, &datum, transaction, cfs)
                 .await
-                .map_err(IndexError::Backend)
+                .wrap_err("Failed to unindex datum")
         })
     }
 
-    #[allow(clippy::type_complexity)]
     fn rebuild<'fut, 't>(
         &'fut self,
         transaction: &'fut B::Transaction<'t>,
         index_cfs: &'fut [B::TransactionCf<'t>],
         datum_cf: &'fut B::TransactionCf<'t>,
-    ) -> waaa::BoxFuture<'fut, Result<(), IndexError<B::Error, <Self::Datum as Datum>::Error>>>
-    {
+    ) -> waaa::BoxFuture<'fut, eyre::Result<()>> {
         Box::pin(async move { default_rebuild(self, transaction, index_cfs, datum_cf).await })
     }
 }
@@ -77,7 +72,7 @@ pub async fn default_rebuild<'fut, 't, B, I>(
     transaction: &'fut B::Transaction<'t>,
     index_cfs: &'fut [B::TransactionCf<'t>],
     datum_cf: &'fut B::TransactionCf<'t>,
-) -> Result<(), IndexError<B::Error, <I::Datum as Datum>::Error>>
+) -> eyre::Result<()>
 where
     B: Backend,
     I: ?Sized + Indexer<B>,
@@ -92,19 +87,25 @@ where
         transaction
             .take_exclusive_lock(datum_cf)
             .await
-            .map_err(|e| IndexError::cf(datum_cf.name(), e))?,
+            .wrap_err_with(|| {
+                CfOperationError::new("Failed taking exclusive lock on", datum_cf.name())
+            })?,
     );
     for cf in index_cfs {
         transaction
             .clear(cf)
             .await
-            .map_err(|e| IndexError::cf(cf.name(), e))?;
+            .wrap_err_with(|| CfOperationError::new("Failed clearing", cf.name()))?;
     }
     let mut all_data = transaction.scan::<[u8]>(datum_cf, ..);
     while let Some(d) = all_data.next().await {
-        let (key, datum) = d.map_err(|e| IndexError::cf(datum_cf.name(), e))?;
-        this.index_from_slice(key.as_ref(), datum.as_ref(), transaction, index_cfs)
-            .await?;
+        let (key, datum) =
+            d.wrap_err_with(|| CfOperationError::new("Failed scanning through", datum_cf.name()))?;
+        let key = key.as_ref();
+        let datum = datum.as_ref();
+        this.index_from_slice(key, datum, transaction, index_cfs)
+            .await
+            .wrap_err_with(|| format!("Failed indexing {key:?}/{datum:?}"))?;
     }
     Ok(())
 }
