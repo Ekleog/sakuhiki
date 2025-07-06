@@ -17,16 +17,7 @@ where
     Self: 't,
     B: 't,
 {
-    type ExclusiveLock<'op>: Send
-    where
-        't: 'op;
-
-    fn take_exclusive_lock<'op>(
-        &'op self,
-        cf: &'op B::TransactionCf<'t>,
-    ) -> waaa::BoxFuture<'op, eyre::Result<Self::ExclusiveLock<'op>>>
-    where
-        't: 'op;
+    fn current_mode(&self) -> Mode;
 
     fn get<'op, 'key>(
         &'op self,

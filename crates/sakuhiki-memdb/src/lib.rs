@@ -1,7 +1,7 @@
 use std::{
     borrow::Borrow,
     collections::BTreeMap,
-    future::{self, Ready, ready},
+    future::{Ready, ready},
     ops::{Bound, RangeBounds},
     sync::Mutex,
 };
@@ -54,7 +54,7 @@ impl Backend for MemDb {
 
     fn transaction<'fut, 'db, Bcf, F, Ret>(
         &'fut self,
-        _mode: Mode,
+        mode: Mode,
         cfs: &'fut [Bcf],
         actions: F,
     ) -> waaa::BoxFuture<'fut, eyre::Result<Ret>>
@@ -64,8 +64,9 @@ impl Backend for MemDb {
             + waaa::Send
             + for<'t> FnOnce(&'t (), Transaction, Vec<TransactionCf<'t>>) -> waaa::BoxFuture<'t, Ret>,
     {
+        // Ignore the mode: we always lock it all here anyway
         Box::pin(async move {
-            let t = Transaction { _private: () };
+            let t = Transaction { mode };
             let mut cfs = cfs
                 .iter()
                 .map(|cf| cf.borrow())
@@ -99,25 +100,13 @@ impl Backend for MemDb {
 }
 
 pub struct Transaction {
-    _private: (),
+    mode: Mode,
 }
 
 // #[warn(clippy::missing_trait_methods)] // MemDb is used only for tests, we can use default impls
 impl<'t> sakuhiki_core::backend::Transaction<'t, MemDb> for Transaction {
-    type ExclusiveLock<'op>
-        = ()
-    where
-        't: 'op;
-
-    fn take_exclusive_lock<'op>(
-        &'op self,
-        _cf: &'op <MemDb as Backend>::TransactionCf<'t>,
-    ) -> waaa::BoxFuture<'op, eyre::Result<Self::ExclusiveLock<'op>>>
-    where
-        't: 'op,
-    {
-        // MemDb already locks literally all the CFs when starting the transaction anyway
-        Box::pin(future::ready(Ok(())))
+    fn current_mode(&self) -> Mode {
+        self.mode
     }
 
     fn get<'op, 'key>(
@@ -226,7 +215,9 @@ impl BackendBuilder for MemDbBuilder {
                     name: i.datum_cf,
                     cf: Mutex::new(db.db.get(i.datum_cf).unwrap().lock().await),
                 };
-                let t = Transaction { _private: () };
+                let t = Transaction {
+                    mode: Mode::IndexRebuilding,
+                };
                 (i.rebuilder)(&t, &index_cfs, &datum_cf).await?;
             }
             Ok(db)

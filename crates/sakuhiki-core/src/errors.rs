@@ -5,6 +5,14 @@
 
 use std::fmt;
 
+use crate::Mode;
+
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("Invalid transaction mode: expected {expected:?}, got {actual:?}")]
+    InvalidTransactionMode { expected: Mode, actual: Mode },
+}
+
 pub struct CfOperationError {
     msg: &'static str,
     cf: &'static str,

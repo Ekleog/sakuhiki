@@ -2,7 +2,7 @@ use eyre::WrapErr as _;
 use futures_util::StreamExt as _;
 
 use crate::{
-    Backend, CfOperationError, Datum,
+    Backend, CfOperationError, Datum, Error, Mode,
     backend::{BackendCf as _, Transaction as _},
 };
 
@@ -77,20 +77,12 @@ where
     B: Backend,
     I: ?Sized + Indexer<B>,
 {
-    // Dark magic to work around https://github.com/rust-lang/rust/issues/100013
-    // See https://github.com/rust-lang/rust/issues/100013#issuecomment-2210995259 for the inspiration
-    // This should be removed someday when rustc gets fixed
-    fn assert_send<T: Send>(v: T) -> impl Send {
-        v
+    if transaction.current_mode() != Mode::IndexRebuilding {
+        return Err(eyre::Report::from(Error::InvalidTransactionMode {
+            expected: Mode::IndexRebuilding,
+            actual: transaction.current_mode(),
+        }));
     }
-    let _lock = assert_send(
-        transaction
-            .take_exclusive_lock(datum_cf)
-            .await
-            .wrap_err_with(|| {
-                CfOperationError::new("Failed taking exclusive lock on", datum_cf.name())
-            })?,
-    );
     for cf in index_cfs {
         transaction
             .clear(cf)

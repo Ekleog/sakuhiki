@@ -1,5 +1,6 @@
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum Mode {
     ReadOnly,
     ReadWrite,
-    // TODO(high): introduce IndexRebuilding type, and kill take_exclusive_lock
+    IndexRebuilding,
 }

@@ -53,6 +53,7 @@ impl Backend for RocksDb {
             + waaa::Send
             + for<'t> FnOnce(&'t (), Transaction<'t>, Vec<Cf<'t>>) -> waaa::BoxFuture<'t, Ret>,
     {
+        // TODO(high): IndexRebuilding should exclusively lock the requested CFs
         Box::pin(async move {
             let t = block_in_place(|| self.db.transaction());
             let t = Transaction::new(t, mode);

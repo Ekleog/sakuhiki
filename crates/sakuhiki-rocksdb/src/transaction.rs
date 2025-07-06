@@ -19,18 +19,7 @@ impl<'t> Transaction<'t> {
 }
 
 impl<'t> sakuhiki_core::backend::Transaction<'t, RocksDb> for Transaction<'t> {
-    type ExclusiveLock<'op>
-        = ()
-    where
-        't: 'op;
-
-    fn take_exclusive_lock<'op>(
-        &'op self,
-        _cf: &'op crate::Cf<'t>,
-    ) -> waaa::BoxFuture<'op, eyre::Result<Self::ExclusiveLock<'op>>>
-    where
-        't: 'op,
-    {
+    fn current_mode(&self) -> Mode {
         todo!() // TODO(high)
     }
 
