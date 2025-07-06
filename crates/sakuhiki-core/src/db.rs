@@ -6,61 +6,12 @@ use futures_util::{StreamExt as _, TryStreamExt as _, stream};
 use waaa::Stream;
 
 use crate::{
-    Backend, CfOperationError, Datum, IndexedDatum, Indexer,
+    Backend, CfOperationError, Datum, IndexedDatum, Indexer, Mode,
     backend::{BackendCf as _, Transaction as _},
 };
 
 pub struct Db<B> {
     backend: B,
-}
-
-macro_rules! make_transaction_fn {
-    ($name:ident) => {
-        pub async fn $name<'fut, const CFS: usize, F, Ret>(
-            &'fut self,
-            cfs: &'fut [&'fut Cf<'fut, B>; CFS],
-            actions: F,
-        ) -> eyre::Result<Ret>
-        where
-            F: 'fut
-                + waaa::Send
-                + for<'t> FnOnce(
-                    Transaction<'t, B>,
-                    [TransactionCf<'t, B>; CFS],
-                ) -> waaa::BoxFuture<'t, Ret>,
-        {
-            let backend_cfs = cfs
-                .iter()
-                .flat_map(|cf| {
-                    iter::once(&cf.datum_cf).chain(cf.indexes_cfs.iter().flat_map(|v| v.iter()))
-                })
-                .collect::<Vec<_>>();
-            let num_backend_cfs = backend_cfs.len();
-            self.backend
-                .$name(&backend_cfs, move |_, transaction, backend_cfs| {
-                    debug_assert!(num_backend_cfs == backend_cfs.len());
-                    let mut backend_cfs = VecDeque::from(backend_cfs);
-                    let mut frontend_cfs = Vec::with_capacity(CFS);
-                    for cf in cfs {
-                        let datum_cf = backend_cfs.pop_front().unwrap();
-                        let mut indexes_cfs = Vec::with_capacity(cf.indexes_cfs.len());
-                        for i in cf.indexes_cfs.iter() {
-                            indexes_cfs.push(backend_cfs.drain(0..i.len()).collect());
-                        }
-                        frontend_cfs.push(TransactionCf {
-                            datum_cf,
-                            indexes_cfs,
-                        });
-                    }
-                    debug_assert!(backend_cfs.is_empty());
-                    let Ok(frontend_cfs) = frontend_cfs.try_into() else {
-                        unreachable!("unexpected number of cfs");
-                    };
-                    actions(Transaction { transaction }, frontend_cfs)
-                })
-                .await
-        }
-    };
 }
 
 impl<B> Db<B>
@@ -92,7 +43,7 @@ where
         );
         let all_cfs = all_cfs.iter().collect::<Vec<_>>();
         self.backend
-            .rw_transaction(&all_cfs, move |_, t, mut cfs| {
+            .transaction(Mode::ReadWrite, &all_cfs, move |_, t, mut cfs| {
                 let datum_cf = cfs.pop().unwrap();
                 let index_cfs = cfs;
                 Box::pin(async move { index.rebuild(&t, &index_cfs, &datum_cf).await })
@@ -127,8 +78,51 @@ where
         })
     }
 
-    make_transaction_fn!(ro_transaction);
-    make_transaction_fn!(rw_transaction);
+    pub async fn transaction<'fut, const CFS: usize, F, Ret>(
+        &'fut self,
+        mode: Mode,
+        cfs: &'fut [&'fut Cf<'fut, B>; CFS],
+        actions: F,
+    ) -> eyre::Result<Ret>
+    where
+        F: 'fut
+            + waaa::Send
+            + for<'t> FnOnce(
+                Transaction<'t, B>,
+                [TransactionCf<'t, B>; CFS],
+            ) -> waaa::BoxFuture<'t, Ret>,
+    {
+        let backend_cfs = cfs
+            .iter()
+            .flat_map(|cf| {
+                iter::once(&cf.datum_cf).chain(cf.indexes_cfs.iter().flat_map(|v| v.iter()))
+            })
+            .collect::<Vec<_>>();
+        let num_backend_cfs = backend_cfs.len();
+        self.backend
+            .transaction(mode, &backend_cfs, move |_, transaction, backend_cfs| {
+                debug_assert!(num_backend_cfs == backend_cfs.len());
+                let mut backend_cfs = VecDeque::from(backend_cfs);
+                let mut frontend_cfs = Vec::with_capacity(CFS);
+                for cf in cfs {
+                    let datum_cf = backend_cfs.pop_front().unwrap();
+                    let mut indexes_cfs = Vec::with_capacity(cf.indexes_cfs.len());
+                    for i in cf.indexes_cfs.iter() {
+                        indexes_cfs.push(backend_cfs.drain(0..i.len()).collect());
+                    }
+                    frontend_cfs.push(TransactionCf {
+                        datum_cf,
+                        indexes_cfs,
+                    });
+                }
+                debug_assert!(backend_cfs.is_empty());
+                let Ok(frontend_cfs) = frontend_cfs.try_into() else {
+                    unreachable!("unexpected number of cfs");
+                };
+                actions(Transaction { transaction }, frontend_cfs)
+            })
+            .await
+    }
 }
 
 pub struct Cf<'db, B>

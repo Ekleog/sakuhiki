@@ -1,19 +1,19 @@
 use std::{ops::RangeBounds, sync::Mutex};
 
-use sakuhiki_core::Backend;
+use sakuhiki_core::{Backend, Mode};
 
 use crate::{Cf, RocksDb};
 
 pub struct Transaction<'t> {
     transaction: Mutex<rocksdb::Transaction<'t, rocksdb::TransactionDB>>,
-    rw: bool,
+    mode: Mode,
 }
 
 impl<'t> Transaction<'t> {
-    pub(crate) fn new(t: rocksdb::Transaction<'t, rocksdb::TransactionDB>, rw: bool) -> Self {
+    pub(crate) fn new(t: rocksdb::Transaction<'t, rocksdb::TransactionDB>, mode: Mode) -> Self {
         Self {
             transaction: Mutex::new(t),
-            rw,
+            mode,
         }
     }
 }

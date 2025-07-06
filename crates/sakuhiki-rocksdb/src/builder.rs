@@ -6,7 +6,7 @@ use std::{
 use eyre::WrapErr as _;
 use rocksdb::{ColumnFamilyDescriptor, SingleThreaded};
 use sakuhiki_core::{
-    Backend as _, BackendBuilder,
+    Backend as _, BackendBuilder, Mode,
     backend::{BuilderConfig, CfOptions},
 };
 use tokio::task::spawn_blocking;
@@ -134,22 +134,26 @@ impl BackendBuilder for RocksDbBuilder {
                 if created_cfs.contains(i.datum_cf)
                     || i.index_cfs.iter().any(|cf| created_cfs.contains(cf))
                 {
-                    let datum_cf = db
-                        .cf_handle(i.datum_cf)
-                        .await
-                        .wrap_err_with(|| format!("Failed opening CF {}", i.datum_cf))?;
-                    let mut index_cfs = Vec::with_capacity(i.index_cfs.len());
+                    let mut cfs = Vec::with_capacity(i.index_cfs.len() + 1);
+                    cfs.push(
+                        db.cf_handle(i.datum_cf)
+                            .await
+                            .wrap_err_with(|| format!("Failed opening CF {}", i.datum_cf))?,
+                    );
                     for cf in i.index_cfs {
-                        index_cfs.push(
+                        cfs.push(
                             db.cf_handle(cf)
                                 .await
                                 .wrap_err_with(|| format!("Failed opening CF {}", i.datum_cf))?,
                         );
                     }
-                    let t = db.start_transaction(true).await?;
-                    (i.rebuilder)(&t, &index_cfs, &datum_cf)
-                        .await
-                        .wrap_err_with(|| format!("Rebuilding index with CFs {:?}", i.index_cfs))?;
+                    let cfs = cfs.iter().collect::<Vec<_>>(); // TODO(high): should take Borrow to avoid that?
+                    // TODO(high): should be Mode::IndexRebuilding
+                    db.transaction(Mode::ReadWrite, &cfs, |_, t, cfs| {
+                        Box::pin(async move { (i.rebuilder)(&t, &cfs[1..], &cfs[0]).await })
+                    })
+                    .await
+                    .wrap_err_with(|| format!("Rebuilding index with CFs {:?}", i.index_cfs))??;
                 }
             }
 

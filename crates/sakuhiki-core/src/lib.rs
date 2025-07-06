@@ -17,3 +17,6 @@ pub use index::Index;
 
 pub mod indexer;
 pub use indexer::Indexer;
+
+mod mode;
+pub use mode::Mode;

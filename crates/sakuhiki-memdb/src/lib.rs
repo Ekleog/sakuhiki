@@ -9,7 +9,7 @@ use async_lock::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use eyre::{WrapErr as _, eyre};
 use futures_util::stream;
 use sakuhiki_core::{
-    Backend, CfOperationError,
+    Backend, CfOperationError, Mode,
     backend::{BackendBuilder, BackendCf, Builder, BuilderConfig},
 };
 
@@ -51,8 +51,9 @@ impl Backend for MemDb {
     type Transaction<'t> = Transaction;
     type TransactionCf<'t> = TransactionCf<'t>;
 
-    fn ro_transaction<'fut, 'db, F, Ret>(
+    fn transaction<'fut, 'db, F, Ret>(
         &'fut self,
+        _mode: Mode,
         cfs: &'fut [&'fut Self::Cf<'db>],
         actions: F,
     ) -> waaa::BoxFuture<'fut, eyre::Result<Ret>>
@@ -85,23 +86,6 @@ impl Backend for MemDb {
                 .collect::<Vec<_>>();
             Ok(actions(&(), t, transaction_cfs).await)
         })
-    }
-
-    fn rw_transaction<'fut, 'db, F, Ret>(
-        &'fut self,
-        cfs: &'fut [&'fut Self::Cf<'db>],
-        actions: F,
-    ) -> waaa::BoxFuture<'fut, eyre::Result<Ret>>
-    where
-        F: 'fut
-            + waaa::Send
-            + for<'t> FnOnce(
-                &'t (),
-                Self::Transaction<'t>,
-                Vec<Self::TransactionCf<'t>>,
-            ) -> waaa::BoxFuture<'t, Ret>,
-    {
-        self.ro_transaction(cfs, actions)
     }
 
     type Key<'op> = Vec<u8>;

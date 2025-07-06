@@ -3,11 +3,10 @@ use std::{
     path::Path,
 };
 
-use eyre::WrapErr as _;
-use sakuhiki_core::{Backend, backend::Builder};
+use sakuhiki_core::{Backend, Mode, backend::Builder};
 use tokio::task::block_in_place;
 
-use crate::{Error, RocksDbBuilder, Transaction, Cf};
+use crate::{Cf, Error, RocksDbBuilder, Transaction};
 
 pub struct RocksDb {
     db: rocksdb::TransactionDB<rocksdb::SingleThreaded>,
@@ -20,36 +19,6 @@ impl RocksDb {
 
     pub(crate) fn new(db: rocksdb::TransactionDB<rocksdb::SingleThreaded>) -> RocksDb {
         RocksDb { db }
-    }
-
-    pub(crate) async fn start_transaction(&self, rw: bool) -> eyre::Result<Transaction<'_>> {
-        let t = block_in_place(|| self.db.transaction());
-        Ok(Transaction::new(t, rw))
-    }
-
-    fn transaction<'fut, 'db, F, Ret>(
-        &'fut self,
-        rw: bool,
-        cfs: &'fut [&'fut Cf<'db>],
-        actions: F,
-    ) -> waaa::BoxFuture<'fut, eyre::Result<Ret>>
-    where
-        F: 'fut
-            + waaa::Send
-            + for<'t> FnOnce(
-                &'t (),
-                Transaction<'t>,
-                Vec<Cf<'t>>,
-            ) -> waaa::BoxFuture<'t, Ret>,
-    {
-        Box::pin(async move {
-            let t = self
-                .start_transaction(rw)
-                .await
-                .wrap_err("Failed starting transaction")?;
-            let cfs = cfs.iter().map(|cf| (**cf).clone()).collect();
-            Ok((actions)(&(), t, cfs).await)
-        })
     }
 }
 
@@ -71,38 +40,23 @@ impl Backend for RocksDb {
     type Transaction<'t> = Transaction<'t>;
     type TransactionCf<'t> = Cf<'t>;
 
-    fn ro_transaction<'fut, 'db, F, Ret>(
+    fn transaction<'fut, 'db, F, Ret>(
         &'fut self,
-        cfs: &'fut [&'fut Self::Cf<'db>],
+        mode: Mode,
+        cfs: &'fut [&'fut Cf<'db>],
         actions: F,
     ) -> waaa::BoxFuture<'fut, eyre::Result<Ret>>
     where
         F: 'fut
             + waaa::Send
-            + for<'t> FnOnce(
-                &'t (),
-                Transaction<'t>,
-                Vec<Cf<'t>>,
-            ) -> waaa::BoxFuture<'t, Ret>,
+            + for<'t> FnOnce(&'t (), Transaction<'t>, Vec<Cf<'t>>) -> waaa::BoxFuture<'t, Ret>,
     {
-        self.transaction(false, cfs, actions)
-    }
-
-    fn rw_transaction<'fut, 'db, F, Ret>(
-        &'fut self,
-        cfs: &'fut [&'fut Self::Cf<'db>],
-        actions: F,
-    ) -> waaa::BoxFuture<'fut, eyre::Result<Ret>>
-    where
-        F: 'fut
-            + waaa::Send
-            + for<'t> FnOnce(
-                &'t (),
-                Self::Transaction<'t>,
-                Vec<Self::TransactionCf<'t>>,
-            ) -> waaa::BoxFuture<'t, Ret>,
-    {
-        self.transaction(true, cfs, actions)
+        Box::pin(async move {
+            let t = block_in_place(|| self.db.transaction());
+            let t = Transaction::new(t, mode);
+            let cfs = cfs.iter().map(|cf| (**cf).clone()).collect();
+            Ok((actions)(&(), t, cfs).await)
+        })
     }
 
     // TODO(blocked): This should be DbPinnableSlice, as soon as

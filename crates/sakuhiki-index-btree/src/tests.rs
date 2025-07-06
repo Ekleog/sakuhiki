@@ -1,5 +1,5 @@
 use eyre::eyre;
-use sakuhiki_core::{Backend, Datum as _, Indexer};
+use sakuhiki_core::{Backend, Datum as _, Indexer, Mode};
 
 use crate::*;
 
@@ -73,7 +73,7 @@ async fn test_index() {
         .await
         .unwrap();
     let datum = db.cf_handle::<Datum>().await.unwrap();
-    db.rw_transaction(&[&datum], |t, [mut datum]| {
+    db.transaction(Mode::ReadWrite, &[&datum], |t, [mut datum]| {
         Box::pin(async move {
             let d12 = Datum::new(1, 2);
             let d21 = Datum::new(2, 1);

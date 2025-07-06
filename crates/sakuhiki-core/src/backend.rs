@@ -5,7 +5,7 @@ use std::{
 
 use waaa::Future;
 
-use crate::{Db, IndexedDatum};
+use crate::{Db, IndexedDatum, Mode};
 
 const SAKUHIKI_PREFIX: &str = "__sakuhiki";
 
@@ -101,24 +101,6 @@ where
     ) -> waaa::BoxFuture<'op, eyre::Result<()>>;
 }
 
-macro_rules! make_transaction_fn {
-    ($name:ident) => {
-        fn $name<'fut, 'db, F, Ret>(
-            &'fut self,
-            cfs: &'fut [&'fut Self::Cf<'db>],
-            actions: F,
-        ) -> waaa::BoxFuture<'fut, eyre::Result<Ret>>
-        where
-            F: 'fut
-                + waaa::Send
-                + for<'t> FnOnce(
-                    &'t (),
-                    Self::Transaction<'t>,
-                    Vec<Self::TransactionCf<'t>>,
-                ) -> waaa::BoxFuture<'t, Ret>;
-    };
-}
-
 pub trait Backend: 'static {
     type Builder: BackendBuilder<Target = Self>;
 
@@ -132,8 +114,20 @@ pub trait Backend: 'static {
     type Transaction<'t>: waaa::Send + waaa::Sync + Transaction<'t, Self>;
     type TransactionCf<'t>: BackendCf;
 
-    make_transaction_fn!(ro_transaction);
-    make_transaction_fn!(rw_transaction);
+    fn transaction<'fut, 'db, F, Ret>(
+        &'fut self,
+        mode: Mode,
+        cfs: &'fut [&'fut Self::Cf<'db>],
+        actions: F,
+    ) -> waaa::BoxFuture<'fut, eyre::Result<Ret>>
+    where
+        F: 'fut
+            + waaa::Send
+            + for<'t> FnOnce(
+                &'t (),
+                Self::Transaction<'t>,
+                Vec<Self::TransactionCf<'t>>,
+            ) -> waaa::BoxFuture<'t, Ret>;
 
     type Key<'op>: waaa::Send + waaa::Sync + AsRef<[u8]>;
     type Value<'op>: waaa::Send + waaa::Sync + AsRef<[u8]>;
