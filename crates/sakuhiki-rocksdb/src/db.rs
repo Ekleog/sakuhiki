@@ -1,4 +1,5 @@
 use std::{
+    borrow::Borrow,
     future::{self, Ready},
     path::Path,
 };
@@ -40,13 +41,14 @@ impl Backend for RocksDb {
     type Transaction<'t> = Transaction<'t>;
     type TransactionCf<'t> = Cf<'t>;
 
-    fn transaction<'fut, 'db, F, Ret>(
+    fn transaction<'fut, 'db, Bcf, F, Ret>(
         &'fut self,
         mode: Mode,
-        cfs: &'fut [&'fut Cf<'db>],
+        cfs: &'fut [Bcf],
         actions: F,
     ) -> waaa::BoxFuture<'fut, eyre::Result<Ret>>
     where
+        Bcf: 'fut + waaa::Send + waaa::Sync + Borrow<Cf<'db>>,
         F: 'fut
             + waaa::Send
             + for<'t> FnOnce(&'t (), Transaction<'t>, Vec<Cf<'t>>) -> waaa::BoxFuture<'t, Ret>,
@@ -54,7 +56,7 @@ impl Backend for RocksDb {
         Box::pin(async move {
             let t = block_in_place(|| self.db.transaction());
             let t = Transaction::new(t, mode);
-            let cfs = cfs.iter().map(|cf| (**cf).clone()).collect();
+            let cfs = cfs.iter().map(|cf| cf.borrow().clone()).collect();
             Ok((actions)(&(), t, cfs).await)
         })
     }

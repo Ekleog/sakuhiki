@@ -147,7 +147,6 @@ impl BackendBuilder for RocksDbBuilder {
                                 .wrap_err_with(|| format!("Failed opening CF {}", i.datum_cf))?,
                         );
                     }
-                    let cfs = cfs.iter().collect::<Vec<_>>(); // TODO(high): should take Borrow to avoid that?
                     // TODO(high): should be Mode::IndexRebuilding
                     db.transaction(Mode::ReadWrite, &cfs, |_, t, cfs| {
                         Box::pin(async move { (i.rebuilder)(&t, &cfs[1..], &cfs[0]).await })

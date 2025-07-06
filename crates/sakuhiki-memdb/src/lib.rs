@@ -1,4 +1,5 @@
 use std::{
+    borrow::Borrow,
     collections::BTreeMap,
     future::{self, Ready, ready},
     ops::{Bound, RangeBounds},
@@ -51,27 +52,32 @@ impl Backend for MemDb {
     type Transaction<'t> = Transaction;
     type TransactionCf<'t> = TransactionCf<'t>;
 
-    fn transaction<'fut, 'db, F, Ret>(
+    fn transaction<'fut, 'db, Bcf, F, Ret>(
         &'fut self,
         _mode: Mode,
-        cfs: &'fut [&'fut Self::Cf<'db>],
+        cfs: &'fut [Bcf],
         actions: F,
     ) -> waaa::BoxFuture<'fut, eyre::Result<Ret>>
     where
+        Bcf: 'fut + waaa::Send + waaa::Sync + Borrow<Self::Cf<'db>>,
         F: 'fut
             + waaa::Send
             + for<'t> FnOnce(&'t (), Transaction, Vec<TransactionCf<'t>>) -> waaa::BoxFuture<'t, Ret>,
     {
         Box::pin(async move {
             let t = Transaction { _private: () };
-            let mut cfs = cfs.iter().enumerate().collect::<Vec<_>>();
+            let mut cfs = cfs
+                .iter()
+                .map(|cf| cf.borrow())
+                .enumerate()
+                .collect::<Vec<_>>();
             cfs.sort_by_key(|e| e.1);
             let mut transaction_cfs = Vec::with_capacity(cfs.len());
             for (i, &name) in cfs {
                 // TODO(med): this ok_or_else should definitely be a proper error type
                 let cf = self
                     .db
-                    .get(*name)
+                    .get(name)
                     .ok_or_else(|| eyre!("Column family does not exist"))
                     .wrap_err_with(|| {
                         CfOperationError::new("Column family does not exist:", name)

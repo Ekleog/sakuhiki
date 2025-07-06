@@ -1,4 +1,5 @@
 use std::{
+    borrow::Borrow,
     collections::{HashMap, HashSet},
     ops::RangeBounds,
 };
@@ -114,13 +115,14 @@ pub trait Backend: 'static {
     type Transaction<'t>: waaa::Send + waaa::Sync + Transaction<'t, Self>;
     type TransactionCf<'t>: BackendCf;
 
-    fn transaction<'fut, 'db, F, Ret>(
+    fn transaction<'fut, 'db, Bcf, F, Ret>(
         &'fut self,
         mode: Mode,
-        cfs: &'fut [&'fut Self::Cf<'db>],
+        cfs: &'fut [Bcf],
         actions: F,
     ) -> waaa::BoxFuture<'fut, eyre::Result<Ret>>
     where
+        Bcf: 'fut + waaa::Send + waaa::Sync + Borrow<Self::Cf<'db>>,
         F: 'fut
             + waaa::Send
             + for<'t> FnOnce(
