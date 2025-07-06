@@ -7,7 +7,7 @@ use waaa::Future;
 
 use crate::{Db, IndexedDatum};
 
-const SAKUHIKI_PREFIX: &'static str = "__sakuhiki";
+const SAKUHIKI_PREFIX: &str = "__sakuhiki";
 
 // TODO(low): add OpenDAL-based backend
 // TODO(low): add cache backend that has two backend layers?
