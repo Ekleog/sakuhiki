@@ -26,7 +26,7 @@ impl<'t> sakuhiki_core::backend::Transaction<'t, RocksDb> for Transaction<'t> {
 
     fn take_exclusive_lock<'op>(
         &'op self,
-        _cf: &'op <RocksDb as Backend>::TransactionCf<'t>,
+        _cf: &'op crate::Cf<'t>,
     ) -> waaa::BoxFuture<'op, eyre::Result<Self::ExclusiveLock<'op>>>
     where
         't: 'op,
