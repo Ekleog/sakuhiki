@@ -6,3 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.0.1-alpha.1](https://github.com/Ekleog/sakuhiki/compare/sakuhiki-v0.0.1-alpha.0...sakuhiki-v0.0.1-alpha.1) - 2025-07-06
+
+### Other
+
+- cleanup noise in initial release's changelog
+- release v0.0.1-alpha.0 ([#1](https://github.com/Ekleog/sakuhiki/pull/1))
