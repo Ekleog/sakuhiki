@@ -7,7 +7,7 @@ use eyre::WrapErr as _;
 use sakuhiki_core::{Backend, backend::Builder};
 use tokio::task::block_in_place;
 
-use crate::{Error, RocksDbBuilder, Transaction, TransactionCf};
+use crate::{Error, RocksDbBuilder, Transaction, Cf};
 
 pub struct RocksDb {
     db: rocksdb::TransactionDB<rocksdb::SingleThreaded>,
@@ -30,7 +30,7 @@ impl RocksDb {
     fn transaction<'fut, 'db, F, Ret>(
         &'fut self,
         rw: bool,
-        cfs: &'fut [&'fut TransactionCf<'db>],
+        cfs: &'fut [&'fut Cf<'db>],
         actions: F,
     ) -> waaa::BoxFuture<'fut, eyre::Result<Ret>>
     where
@@ -39,7 +39,7 @@ impl RocksDb {
             + for<'t> FnOnce(
                 &'t (),
                 Transaction<'t>,
-                Vec<TransactionCf<'t>>,
+                Vec<Cf<'t>>,
             ) -> waaa::BoxFuture<'t, Ret>,
     {
         Box::pin(async move {
@@ -57,19 +57,19 @@ impl RocksDb {
 impl Backend for RocksDb {
     type Builder = RocksDbBuilder;
 
-    type Cf<'db> = TransactionCf<'db>;
+    type Cf<'db> = Cf<'db>;
 
     type CfHandleFuture<'op> = Ready<eyre::Result<Self::Cf<'op>>>;
 
     fn cf_handle<'db>(&'db self, name: &'static str) -> Self::CfHandleFuture<'db> {
         let result = block_in_place(|| self.db.cf_handle(name))
             .ok_or_else(|| eyre::Report::from(Error::NoSuchCf(name)))
-            .map(|cf| TransactionCf::new(name, cf));
+            .map(|cf| Cf::new(name, cf));
         future::ready(result)
     }
 
     type Transaction<'t> = Transaction<'t>;
-    type TransactionCf<'t> = TransactionCf<'t>;
+    type TransactionCf<'t> = Cf<'t>;
 
     fn ro_transaction<'fut, 'db, F, Ret>(
         &'fut self,
@@ -82,7 +82,7 @@ impl Backend for RocksDb {
             + for<'t> FnOnce(
                 &'t (),
                 Transaction<'t>,
-                Vec<TransactionCf<'t>>,
+                Vec<Cf<'t>>,
             ) -> waaa::BoxFuture<'t, Ret>,
     {
         self.transaction(false, cfs, actions)

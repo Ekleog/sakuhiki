@@ -7,7 +7,7 @@ mod error;
 mod transaction;
 
 pub use builder::RocksDbBuilder;
-pub use cf::TransactionCf;
+pub use cf::Cf;
 pub use db::RocksDb;
 pub use error::Error;
 pub use transaction::Transaction;

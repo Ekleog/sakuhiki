@@ -2,7 +2,7 @@ use std::{ops::RangeBounds, sync::Mutex};
 
 use sakuhiki_core::Backend;
 
-use crate::{RocksDb, TransactionCf};
+use crate::{Cf, RocksDb};
 
 pub struct Transaction<'t> {
     transaction: Mutex<rocksdb::Transaction<'t, rocksdb::TransactionDB>>,
@@ -36,7 +36,7 @@ impl<'t> sakuhiki_core::backend::Transaction<'t, RocksDb> for Transaction<'t> {
 
     fn get<'op, 'key>(
         &'op self,
-        cf: &'op TransactionCf<'t>,
+        cf: &'op Cf<'t>,
         key: &'key [u8],
     ) -> waaa::BoxFuture<'key, eyre::Result<Option<Vec<u8>>>>
     where
@@ -47,7 +47,7 @@ impl<'t> sakuhiki_core::backend::Transaction<'t, RocksDb> for Transaction<'t> {
 
     fn scan<'op, 'keys, R>(
         &'op self,
-        cf: &'op TransactionCf<'t>,
+        cf: &'op Cf<'t>,
         keys: impl 'keys + RangeBounds<R>,
     ) -> waaa::BoxStream<'keys, eyre::Result<(Vec<u8>, Vec<u8>)>>
     where
@@ -60,7 +60,7 @@ impl<'t> sakuhiki_core::backend::Transaction<'t, RocksDb> for Transaction<'t> {
 
     fn put<'op, 'kv>(
         &'op self,
-        cf: &'op TransactionCf<'t>,
+        cf: &'op Cf<'t>,
         key: &'kv [u8],
         value: &'kv [u8],
     ) -> waaa::BoxFuture<'kv, eyre::Result<Option<Vec<u8>>>>
@@ -73,7 +73,7 @@ impl<'t> sakuhiki_core::backend::Transaction<'t, RocksDb> for Transaction<'t> {
 
     fn delete<'op, 'key>(
         &'op self,
-        cf: &'op TransactionCf<'t>,
+        cf: &'op Cf<'t>,
         key: &'key [u8],
     ) -> waaa::BoxFuture<'key, eyre::Result<Option<Vec<u8>>>>
     where
