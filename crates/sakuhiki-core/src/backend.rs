@@ -7,6 +7,8 @@ use waaa::Future;
 
 use crate::{Db, IndexedDatum};
 
+const SAKUHIKI_PREFIX: &'static str = "__sakuhiki";
+
 // TODO(low): add OpenDAL-based backend
 // TODO(low): add cache backend that has two backend layers?
 pub trait Transaction<'t, B: ?Sized + Backend>
@@ -226,6 +228,9 @@ impl<B: Backend> Builder<B> {
         cf: &'static str,
         options: <B::Builder as BackendBuilder>::CfOptions,
     ) -> &mut Self {
+        if cf.starts_with(SAKUHIKI_PREFIX) {
+            panic!("CFs starting with {SAKUHIKI_PREFIX} are reserved for internal use");
+        }
         let config = self.config.as_mut().expect("Reusing consumed builder");
         let previous = config.cfs.insert(cf, CfOptions::Configured(options));
         assert!(previous.is_none(), "Configured CF {cf} multiple times");
@@ -233,6 +238,9 @@ impl<B: Backend> Builder<B> {
     }
 
     pub fn cf_options_reuse_last(&mut self, cf: &'static str) -> &mut Self {
+        if cf.starts_with(SAKUHIKI_PREFIX) {
+            panic!("CFs starting with {SAKUHIKI_PREFIX} are reserved for internal use");
+        }
         let config = self.config.as_mut().expect("Reusing consumed builder");
         let previous = config.cfs.insert(cf, CfOptions::ReuseLast);
         assert!(previous.is_none(), "Configured CF {cf} multiple times");
@@ -241,6 +249,9 @@ impl<B: Backend> Builder<B> {
 
     pub fn datum<D: IndexedDatum<B>>(&mut self) -> &mut Self {
         fn require_cf(used_cfs: &mut HashSet<&'static str>, cf: &'static str) {
+            if cf.starts_with(SAKUHIKI_PREFIX) {
+                panic!("CFs starting with {SAKUHIKI_PREFIX} are reserved for internal use");
+            }
             let new_insert = used_cfs.insert(cf);
             assert!(new_insert, "Multiple datum types require the same CF {cf}");
         }
