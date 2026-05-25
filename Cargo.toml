@@ -33,7 +33,7 @@ async-stream = "0.3.6"
 derive_more = { version = "2.0", features = ["display"] }
 eyre = "0.6.12"
 futures-util = "0.3.31"
-indexed-db = "0.4.2"
+indexed-db = "0.5.0"
 rocksdb = "0.23.0"
 tokio = "1.43"
 thiserror = "2.0"
